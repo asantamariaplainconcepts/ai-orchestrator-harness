@@ -1,0 +1,47 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+[Dd]ebug/
+[Rr]elease/
+# Build output, and the development instance's database, runs and scripts' outputs, which the
+# AppHost keeps in src/artifacts/data/ of its checkout (ADR-0003, #757).
+artifacts/
+
+# Aspire
+aspire.config.json
+.aspire/
+
+# Node
+node_modules/
+dist/
+
+# The SPA build output lands in the host's wwwroot; it is a build artifact.
+src/root/AiOrchestrator.Server/wwwroot/
+
+# The workflow prompts under .claude/commands/ are committed on purpose — they are what the
+# seeded workflows name. Everything an agent tool leaves beside them is not: worktree metadata,
+# lock files, local settings.
+.claude/worktrees/
+.claude/*.lock
+.claude/settings.local.json
+
+# Where this app puts the worktrees it creates — GitWorktreeManager writes
+# <folder>/.worktrees/<branch>. Without this the product's own folder card reports the worktrees
+# it just made as uncommitted work in the checkout it made them from.
+.worktrees/
+
+# A run's end record, written by `.aio/aio done` in the run's worktree (#499). It is the
+# run's output, read by the control plane, and an agent that commits everything must not commit it.
+.aio/done.json
+
+# Where push-session-report wrote before its record moved to the issue (aio:state). Still ignored,
+# so a file left in an older checkout stays out of a commit.
+.telemetry/
+
+# Local
+.DS_Store
+*.log
+.vs/
+.idea/

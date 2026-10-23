@@ -1,0 +1,30 @@
+<Solution>
+  <Folder Name="/modules/">
+    <Project Path="modules/Runs/AiOrchestrator.Modules.Runs/AiOrchestrator.Modules.Runs.csproj" />
+    <Project Path="modules/Pbis/AiOrchestrator.Modules.Pbis/AiOrchestrator.Modules.Pbis.csproj" />
+    <Project Path="modules/Workspace/AiOrchestrator.Modules.Workspace/AiOrchestrator.Modules.Workspace.csproj" />
+    <Project Path="modules/Loop/AiOrchestrator.Modules.Loop/AiOrchestrator.Modules.Loop.csproj" />
+  </Folder>
+  <Folder Name="/root/">
+    <Project Path="root/AiOrchestrator.AppHost/AiOrchestrator.AppHost.csproj" />
+    <Project Path="root/AiOrchestrator.MigrationService/AiOrchestrator.MigrationService.csproj" />
+    <Project Path="root/AiOrchestrator.Server/AiOrchestrator.Server.csproj" />
+  </Folder>
+  <Folder Name="/shared/">
+    <Project Path="shared/AiOrchestrator.ArchitectureAnalyzers/AiOrchestrator.ArchitectureAnalyzers.csproj" />
+    <Project Path="shared/AiOrchestrator.BuildingBlocks/AiOrchestrator.BuildingBlocks.csproj" />
+    <Project Path="shared/AiOrchestrator.Infrastructure/AiOrchestrator.Infrastructure.csproj" />
+    <Project Path="shared/AiOrchestrator.ServiceDefaults/AiOrchestrator.ServiceDefaults.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AiOrchestrator.InfrastructureTests/AiOrchestrator.InfrastructureTests.csproj" />
+    <Project Path="tests/AiOrchestrator.ArchitectureTests/AiOrchestrator.ArchitectureTests.csproj" />
+    <Project Path="tests/AiOrchestrator.EndToEndTests/AiOrchestrator.EndToEndTests.csproj" />
+    <Project Path="tests/AiOrchestrator.SharedFunctionalTests/AiOrchestrator.SharedFunctionalTests.csproj" />
+    <Project Path="tests/AiOrchestrator.Modules.Runs.FunctionalTests/AiOrchestrator.Modules.Runs.FunctionalTests.csproj" />
+    <Project Path="tests/AiOrchestrator.Modules.Workspace.FunctionalTests/AiOrchestrator.Modules.Workspace.FunctionalTests.csproj" />
+    <Project Path="tests/AiOrchestrator.Modules.Pbis.FunctionalTests/AiOrchestrator.Modules.Pbis.FunctionalTests.csproj" />
+    <Project Path="tests/AiOrchestrator.Modules.Loop.FunctionalTests/AiOrchestrator.Modules.Loop.FunctionalTests.csproj" />
+    <Project Path="tests/AiOrchestrator.Server.FunctionalTests/AiOrchestrator.Server.FunctionalTests.csproj" />
+  </Folder>
+</Solution>

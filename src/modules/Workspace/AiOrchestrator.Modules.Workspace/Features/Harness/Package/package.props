@@ -1,0 +1,60 @@
+<Project>
+  <!--
+    The harness package: every file `Install harness` writes into a repository (#566), embedded in
+    Modules.Workspace under its install path. HarnessPackage reads them back.
+
+    One rule says who owns what (#779): a file of the package starts with the line "Managed by aio
+    <version>. Install harness overwrites it." and every update overwrites it. Nothing else under
+    .aio/ is overwritten. The root of .aio/ gets the loop.yaml template, the gate stub, the
+    config.json example (evidence, quality and the protected paths) and the issue and epic templates,
+    written only where the repository has none, and the version.
+    The package's files are the loop's steps in steps/, the agents' CLI aio, and what a step uses:
+    checks/, lib/, schemas/, and scorers/laya/ with the model server and its requirements (#759).
+    README.md is the package's too (#742): a repository that installed the harness reads in it what
+    each step of the loop does. It is this repository's own file, embedded and not copied, like the
+    scripts.
+
+    The package's own files are in this folder: the root's files, the version, and the links. Every
+    other file is this repository's, named here and not copied, so a script fixed in .aio/steps/
+    ships as fixed, and so do the six commands of .ai/commands/aio/: since #618 this repository runs
+    the package's commands, and what is its own (the plan as an OpenSpec change, its ports, its
+    files) is in .aio/context.md, which the commands read when it exists and the package does not
+    carry. HarnessPackageTests fails when the package and this repository disagree. What only this
+    repository runs is in scripts/, and archive at the root of .aio/, so the package carries none of
+    it (#760, #779): archive, because the package's loop has nothing to archive, release, which only
+    this repository makes (#652), trust-sweep, which tidies this machine's Claude Code configuration
+    (#655), pack, which makes this app's .NET tool (#678), and keep-committer, which only this
+    repository's rebasing state runs (#741).
+
+    Change any file below and raise the version in this folder, or a repository already at that
+    version is told it is current. This repository's own .aio/version says what it has installed: it
+    keeps its own loop.yaml and gate, so it is not the package's version.
+  -->
+  <PropertyGroup>
+    <HarnessRepository>$(MSBuildThisFileDirectory)..\..\..\..\..\..\..\</HarnessRepository>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)loop.yaml" LogicalName="harness/.aio/loop.yaml" Link="Harness\loop.yaml" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)gate" LogicalName="harness/.aio/gate" Link="Harness\gate" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)config.json" LogicalName="harness/.aio/config.json" Link="Harness\config.json" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)links" LogicalName="harness-links" Link="Harness\links" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)version" LogicalName="harness/.aio/version" Link="Harness\version" />
+    <!-- The issue and epic templates are the Definition of Ready refine and explore read (#633). -->
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)templates\*.md" LogicalName="harness/.aio/templates/%(Filename)%(Extension)" Link="Harness\templates\%(Filename)%(Extension)" />
+
+    <EmbeddedResource Include="$(HarnessRepository).ai\commands\aio\*.md" LogicalName="harness/.ai/commands/aio/%(Filename)%(Extension)" Link="Harness\commands\%(Filename)%(Extension)" />
+    <EmbeddedResource Include="$(HarnessRepository).aio\README.md" LogicalName="harness/.aio/README.md" Link="Harness\README.md" />
+    <EmbeddedResource Include="$(HarnessRepository).aio\aio" LogicalName="harness/.aio/aio" Link="Harness\aio" />
+    <EmbeddedResource Include="$(HarnessRepository).aio\steps\*" LogicalName="harness/.aio/steps/%(Filename)%(Extension)" Link="Harness\steps\%(Filename)%(Extension)" />
+    <!-- aio and the steps import lib/. -->
+    <EmbeddedResource Include="$(HarnessRepository).aio\lib\*" LogicalName="harness/.aio/lib/%(Filename)%(Extension)" Link="Harness\lib\%(Filename)%(Extension)" />
+    <!-- The checks quality runs, each a row of its comment (#746, #758). -->
+    <EmbeddedResource Include="$(HarnessRepository).aio\checks\*" LogicalName="harness/.aio/checks/%(Filename)%(Extension)" Link="Harness\checks\%(Filename)%(Extension)" />
+    <!-- The model server the engine ensures before a score, and the requirements it pins (#759). -->
+    <EmbeddedResource Include="$(HarnessRepository).aio\scorers\laya\*" LogicalName="harness/.aio/scorers/laya/%(Filename)%(Extension)" Link="Harness\scorers\laya\%(Filename)%(Extension)" />
+    <EmbeddedResource Include="$(HarnessRepository).aio\schemas\*" LogicalName="harness/.aio/schemas/%(Filename)%(Extension)" Link="Harness\schemas\%(Filename)%(Extension)" />
+    <EmbeddedResource Include="$(HarnessRepository).claude\hooks\pre-tool-use" LogicalName="harness/.claude/hooks/pre-tool-use" Link="Harness\pre-tool-use" />
+    <EmbeddedResource Include="$(HarnessRepository).claude\settings.json" LogicalName="harness/.claude/settings.json" Link="Harness\settings.json" />
+  </ItemGroup>
+</Project>

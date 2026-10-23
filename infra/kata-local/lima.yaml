@@ -1,0 +1,57 @@
+# The VM kata.sh starts: Ubuntu on Virtualization.framework with nested virtualization, so the
+# guest has /dev/kvm and Kata can boot one microVM per pod inside it. Apple M3 or later, macOS 15
+# or later.
+#
+# Bounded on purpose: the laptop also runs the Podman machine and the sbx sandboxes.
+minimumLimaVersion: 2.0.0
+base: template:_images/ubuntu-lts
+
+vmType: vz
+nestedVirtualization: true
+cpus: 4
+memory: 8GiB
+disk: 40GiB
+
+# Nothing of the host is shared: the cluster needs no files from the Mac.
+mounts: []
+# k3s brings its own containerd, and that is the one kata-deploy configures.
+containerd:
+  system: false
+  user: false
+
+# Only the API server is forwarded, to 127.0.0.1:16443 rather than 6443, so it never meets a kind
+# or k3d cluster a person already has on the default port. Nothing else the guest listens on
+# reaches the Mac.
+portForwards:
+  - guestPort: 6443
+    hostPort: 16443
+  - guestPortRange: [1, 65535]
+    ignore: true
+  - guestIP: 0.0.0.0
+    guestPortRange: [1, 65535]
+    ignore: true
+
+provision:
+  - mode: system
+    script: |
+      #!/bin/sh
+      set -eu
+      if [ ! -d /var/lib/rancher/k3s ]; then
+        curl -sfL https://get.k3s.io |
+          INSTALL_K3S_VERSION=v1.36.5+k3s1 INSTALL_K3S_EXEC="server --write-kubeconfig-mode 644 --disable traefik --disable metrics-server" sh -
+      fi
+      # kata-deploy ships as a Helm chart, and helm runs here so the Mac needs none.
+      command -v helm >/dev/null ||
+        curl -fsSL https://raw.githubusercontent.com/helm/helm/v3.22.0/scripts/get-helm-3 | DESIRED_VERSION=v3.22.0 bash
+
+probes:
+  - script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      timeout 60s bash -c "until test -f /etc/rancher/k3s/k3s.yaml; do sleep 3; done"
+    hint: k3s has not written its kubeconfig yet; see `limactl shell kata-local sudo journalctl -u k3s`.
+
+copyToHost:
+  - guest: /etc/rancher/k3s/k3s.yaml
+    host: "{{.Dir}}/copied-from-guest/kubeconfig.yaml"
+    deleteOnStop: true

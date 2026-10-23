@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <RootNamespace>AiOrchestrator.Server</RootNamespace>
+    <!-- The functional test host drives this assembly through WebApplicationFactory. -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <UserSecretsId>b4b6f2f1-7c0e-4a2a-9a3f-1d5e6c8b9a11</UserSecretsId>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- #678. `dotnet pack` makes the app a .NET tool: `dnx aio` runs it, `dotnet tool install -g aio`
+         keeps it. Framework-dependent, because whoever runs a .NET tool already has the runtime.
+         The built SPA is in wwwroot only after `pnpm build`, which scripts/pack runs first. -->
+    <IsPackable>true</IsPackable>
+    <PackAsTool>true</PackAsTool>
+    <PackageId>aio</PackageId>
+    <ToolCommandName>aio</ToolCommandName>
+    <Description>AI Orchestrator: the loop that takes an issue to a merged pull request, in your browser.</Description>
+    <Authors>asantamariaplainconcepts</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageOutputPath>$(MSBuildThisFileDirectory)..\..\..\artifacts\</PackageOutputPath>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- #508. `dotnet build` writes the API's OpenAPI document into the frontend, which generates
+         its contract from it (Contracts/ApiContract.cs). -->
+    <OpenApiGenerateDocuments>true</OpenApiGenerateDocuments>
+    <OpenApiDocumentsDirectory>$(MSBuildThisFileDirectory)..\..\frontend\shared\http</OpenApiDocumentsDirectory>
+    <OpenApiGenerateDocumentsOptions>--file-name openapi</OpenApiGenerateDocumentsOptions>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\shared\AiOrchestrator.BuildingBlocks\AiOrchestrator.BuildingBlocks.csproj" />
+    <ProjectReference Include="..\..\shared\AiOrchestrator.ServiceDefaults\AiOrchestrator.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\..\shared\AiOrchestrator.Infrastructure\AiOrchestrator.Infrastructure.csproj" />
+    <!-- Modules are discovered at runtime, but must be built and copied beside the host. -->
+    <ProjectReference Include="..\..\modules\Workspace\AiOrchestrator.Modules.Workspace\AiOrchestrator.Modules.Workspace.csproj" />
+    <ProjectReference Include="..\..\modules\Pbis\AiOrchestrator.Modules.Pbis\AiOrchestrator.Modules.Pbis.csproj" />
+    <ProjectReference Include="..\..\modules\Runs\AiOrchestrator.Modules.Runs\AiOrchestrator.Modules.Runs.csproj" />
+    <ProjectReference Include="..\..\modules\Loop\AiOrchestrator.Modules.Loop\AiOrchestrator.Modules.Loop.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The label watcher's loop is internal to the host; its tests drive it directly. -->
+    <InternalsVisibleTo Include="AiOrchestrator.Server.FunctionalTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.AspNetCore.SpaServices.Extensions" />
+    <PackageReference Include="Microsoft.Extensions.ApiDescription.Server">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Scalar.AspNetCore" />
+  </ItemGroup>
+</Project>

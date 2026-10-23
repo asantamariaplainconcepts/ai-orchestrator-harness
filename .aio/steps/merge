@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# Managed by aio. Install harness overwrites it.
+# The one merge. Squash-merges a pull request and deletes its branch at the remote, and answers one
+# JSON line: {outcome, merged, observed, state, branchDeleted, why}. Exit 0 when the pull request is merged, 1 when it is not or nobody can tell.
+# outcome is what the loop reads: `merged`, or `conflict` when gh says the pull request cannot be
+# merged cleanly ("is not mergeable", or a conflict), and absent on any other failure, which holds.
+#
+#   .aio/steps/merge <pull request> [expected head sha]
+#
+# Run by the loop's `merging` state, after `archive`, from the PBI's worktree, and by hand. What a
+# caller does around it — the archive, removing the worktree — stays the caller's; this is only what
+# happens at the vendor.
+#
+# - An expected head is the SHA a person approved. A head that moved since refuses, and gh is also
+#   handed --match-head-commit so the check holds at the instant of the merge, not only before it.
+# - --squash is named rather than left to the repository's default, and there is no
+#   --delete-branch: it switches the local checkout and fails while another worktree holds the
+#   trunk, after the merge already landed. The branch is deleted at the remote instead, because the
+#   pushed branch is the claim (ADR-0005), and a claim left behind reads as work still in flight.
+# - Every write is read back (principle 4): the pull request after gh answered, whatever it
+#   answered, and the branch at origin after the delete. `merged` and `observed` are true only when
+#   the read-back says MERGED at the expected head; `state` is what it said, and `branchDeleted` is
+#   what ls-remote said. Until #502 a merge gh accepted was never read again, so every successful
+#   merge answered observed: false.
+# - Nothing retries.
+# - Nothing is released: a release is made by hand (CONTRIBUTING.md). Until #652 every merge ran
+#   release, and its "tag already exists" paragraph filled every merge's why.
+set -uo pipefail
+export LC_ALL=C  # git's sentences are read here, and the C locale keeps them in English (#762)
+
+pr="${1:-}"
+expected="${2:-}"
+export GH_PAGER=cat GH_PROMPT_DISABLED=1 GIT_TERMINAL_PROMPT=0
+
+state_read=null
+
+say() { # say <merged> <observed> <branchDeleted> <why>
+  local why
+  why=$(printf '%s' "$4" | tr '\n"\\' "  '" | sed 's/  */ /g; s/ $//')
+  local outcome=""
+  if [ "$1" = true ]; then
+    outcome='"outcome": "merged", '
+  elif printf '%s' "$why" | grep -qiE 'not mergeable|conflict'; then
+    outcome='"outcome": "conflict", '
+  fi
+  printf '{%s"merged": %s, "observed": %s, "state": %s, "branchDeleted": %s, "why": "%s"}\n' \
+    "$outcome" "$1" "$2" "$state_read" "$3" "$why"
+}
+
+[[ "$pr" =~ ^[0-9]+$ ]] || { say false false false "merge: no pull request number given"; exit 1; }
+
+# Run from the worktree by all three callers. Uncommitted work would never land, and the worktree
+# is removed right after a merge.
+dirty=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+[ "$dirty" = 0 ] || { say false false false "$dirty uncommitted files here would never land. Commit or discard them; nothing was merged."; exit 1; }
+
+# state, head and branch in one read: "OPEN 1a2b… change/42"
+read_pr() { gh pr view "$pr" --json state,headRefOid,headRefName --jq '.state+" "+.headRefOid+" "+.headRefName' 2>&1; }
+
+if ! seen=$(read_pr); then
+  say false false false "Pull request $pr could not be read: $seen"
+  exit 1
+fi
+read -r state head branch <<<"$seen"
+state_read="\"$state\""
+
+failed=false
+said=""
+if [ "$state" != "MERGED" ]; then
+  if [ -n "$expected" ] && [ "$head" != "$expected" ]; then
+    say false false false "Pull request $pr's head moved to $head after $expected was approved. Approve the new head; nothing was merged."
+    exit 1
+  fi
+
+  args=(pr merge "$pr" --squash)
+  [ -n "$expected" ] && args+=(--match-head-commit "$expected")
+
+  said=$(gh "${args[@]}" 2>&1) || failed=true
+
+  # The read-back, after gh answered either way: gh's exit is what it said, the vendor's state is
+  # what happened, and only the second counts.
+  if ! after=$(read_pr); then
+    state_read=null
+    say false false false "Pull request $pr was sent to merge, and reading it back failed: $after. Read its state before trying again."
+    exit 1
+  fi
+  read -r state head _ <<<"$after"
+  state_read="\"$state\""
+fi
+
+if [ "$state" != "MERGED" ] || { [ -n "$expected" ] && [ "$head" != "$expected" ]; }; then
+  if [ "$failed" = true ]; then
+    say false false false "$said"
+  else
+    say false false false "gh answered that pull request $pr merged, but reading it back says $state at $head. Nothing was confirmed."
+  fi
+  exit 1
+fi
+
+# The delete, then the read: gone at the remote counts as deleted, because GitHub may delete merged
+# branches by itself.
+git push -q origin --delete "$branch" >/dev/null 2>&1
+if git ls-remote --exit-code origin "refs/heads/$branch" >/dev/null 2>&1; then deleted=false; else deleted=true; fi
+
+say true true "$deleted" "Pull request $pr reads back as merged at $head, and $branch is $([ "$deleted" = true ] && echo "gone from origin" || echo "still at origin, still claimed")."

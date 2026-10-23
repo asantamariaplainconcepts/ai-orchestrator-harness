@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key>
+  <string>AI Orchestrator</string>
+  <key>CFBundleDisplayName</key>
+  <string>AI Orchestrator</string>
+  <key>CFBundleIdentifier</key>
+  <string>dev.aiorchestrator.app</string>
+  <key>CFBundleVersion</key>
+  <string>__VERSION__</string>
+  <key>CFBundleShortVersionString</key>
+  <string>__VERSION__</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleExecutable</key>
+  <string>AiOrchestrator</string>
+  <!-- Stays in the Dock rather than running as an agent: the UI is a browser tab, so the icon is
+       the only thing the user can quit, and an app with nothing to quit is one that ends up
+       running twice. -->
+  <key>LSUIElement</key>
+  <false/>
+  <key>LSMinimumSystemVersion</key>
+  <string>13.0</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+</dict>
+</plist>

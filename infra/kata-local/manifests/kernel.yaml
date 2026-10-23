@@ -1,0 +1,24 @@
+# Two pods on the one node: one under runc, one under Kata. If the sandbox is real, `uname -r`
+# answers two different kernels.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: probe-runc
+  labels: { probe: kernel }
+spec:
+  containers:
+    - name: main
+      image: docker.io/library/alpine:3.22
+      command: ["sleep", "infinity"]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: probe-kata
+  labels: { probe: kernel }
+spec:
+  runtimeClassName: kata-qemu
+  containers:
+    - name: main
+      image: docker.io/library/alpine:3.22
+      command: ["sleep", "infinity"]

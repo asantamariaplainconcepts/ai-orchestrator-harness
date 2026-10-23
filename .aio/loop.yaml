@@ -1,0 +1,120 @@
+# The loop of this repository, in the format of openspec/specs/loop-format. Each state is the status:*
+# label a PBI carries while it is in it, and the file reads top to bottom: a transition to a state
+# above the one it leaves goes back, and needs max_loops. A target no state declares (done,
+# needs-refinement) is a state where the loop does nothing. back is where a person's Request changes
+# sends the PBI from a state, and tab is the PBI screen's tab marked while the PBI is there.
+#
+# verifying runs the evidence after the gate. The first outcome that holds is the state's, so the
+# evidence's blocked or failed holds a green gate; its passed and skipped leave the gate's green to
+# decide. quality comes last and reports: its reported is named by no on, and it exits 0 (#746).
+#
+# The tail: the retro goes before the merge, so its entry
+# travels in the same PR, and a conflict goes to rebasing once before the PBI is held.
+#
+# Read by Modules.Loop (Definition/LoopReader.cs).
+name: spec-driven-issue-loop
+wip: 4
+
+agents:
+  # Opus where the work is deciding what to build (refine and the proposal), Sonnet from the
+  # implement on: the coder and the reviewer. The proposal's state names Opus over the coder's Sonnet.
+  refiner:
+    provider: claude-code
+    model: claude-opus-5-5
+  coder:
+    provider: claude-code
+    model: claude-sonnet-5-5
+  # claude-code until v2 has a Copilot adapter (#544): copilot here fails code-review with AgentNotFound.
+  reviewer:
+    provider: claude-code
+    model: claude-sonnet-5-5
+
+states:
+  ready-for-proposal:
+    agent: refiner
+    command: /aio:refine
+    on:
+      ready: spec-ready
+      gaps: needs-refinement
+
+  spec-ready:
+    script:
+      - file-overlap
+      - claim
+    agent: coder
+    model: claude-opus-5-5
+    command: /aio:propose
+    next: proposal-review
+    pr: draft
+
+  proposal-review:
+    score: risk-score
+    back: spec-ready
+    tab: proposal
+    on:
+      low: in-progress
+      high:
+        hold: El score de riesgo salió alto
+        next: in-progress
+
+  in-progress:
+    agent: coder
+    command: /aio:implement
+    next: verifying
+
+  verifying:
+    script:
+      - gate
+      - evidence
+      - quality
+    on:
+      green:
+        next: code-review
+        pr: ready
+      red:
+        hold: El gate está en rojo
+      blocked:
+        hold: La evidencia hacía falta y no se pudo tomar
+      failed:
+        hold: Las capturas de la evidencia fallaron
+
+  code-review:
+    agent: reviewer
+    command: /aio:review-diff
+    max_loops: 2
+    back: in-progress
+    tab: review
+    on:
+      rejected: in-progress
+      approved: merge-review
+
+  merge-review:
+    score: diff-risk
+    back: in-progress
+    tab: review
+    on:
+      low: retro
+      high:
+        hold: El riesgo del diff salió alto
+        next: retro
+
+  retro:
+    agent: coder
+    command: /aio:review
+    next: merging
+
+  merging:
+    script:
+      - archive
+      - merge
+    on:
+      merged:
+        next: done
+        pr: close
+      conflict: rebasing
+
+  rebasing:
+    agent: coder
+    command: /rebase-safely
+    max_loops: 1
+    next: merging

@@ -1,0 +1,373 @@
+#!/usr/bin/env node
+// Managed by aio. Install harness overwrites it.
+// Measures what the change touched, against its base, and publishes it on its issue (#746).
+// `verifying` runs it after the gate and the evidence, in the PBI's worktree:
+//
+//   .aio/steps/quality <issue>
+//
+// It reports and blocks nothing: it answers {outcome: "reported", published, comment, why} and exits 0
+// whatever it measured, so the gate's green or red is still the state's. Blocking on a number waits for
+// baselines that only shrink, measured over a few pull requests first.
+//
+// It reads what the gate left and measures nothing the gate did not, but the duplication and the three
+// that read the diff, the issue and the old tests. Eight checks:
+//
+// - coverage of the lines the change added or rewrote: the Cobertura report crossed with the diff;
+// - CRAP of the methods it touched: the highest and how many pass the line, from crap.tsv through
+//   checks/crap.sh;
+// - mutation in the files it touched: the score of a summary.json as Stryker.NET's step writes it,
+//   reported only;
+// - new duplicated lines in the files it touched: jscpd on the head and on the base, 10 lines and 70
+//   tokens at least, per file, as PlainConceptsPlatform/Lyceum#89 counts them: the lines of a file
+//   inside a clone at the head, less those at the base;
+// - tests lost or skipped, by name, through checks/tests-lost-or-skipped.sh;
+// - tests touched: the test files that stood at the base and the change modified, deleted or renamed
+//   outside the issue's Dónde cae, through checks/tests-touched.sh;
+// - files outside the issue's paths: what the diff names that no path of its Dónde cae covers, through
+//   checks/out-of-seam.sh;
+// - new code on old tests only: every C# test file the change modified, run in its base form against
+//   the head, through checks/old-tests-new-code.sh. It builds, so it runs last (#758).
+//
+// The issue's Dónde cae is read as file-overlap reads it, by lib/where-it-lands.js, and handed to the
+// checks in CHECK_DECLARED: each path as itself and as what sits under it.
+//
+// Where the reports are and the lines are the repository's own .aio/config.json, under quality, which may carry
+// // comment lines. Without it the lines are this repository's: coverage 70%, CRAP 30, no new
+// duplicated line, no test lost, touched or failing in its base form, no file outside. A check with no report, or a report of another commit, is
+// "not measured" with the reason: never a silent pass.
+//
+// One comment on the issue carries a table of check, measured, line and result (ok, over or not
+// measured). It opens with <!-- aio:quality <head sha> -->, which the Review tab and /aio:review-diff
+// look for.
+'use strict';
+
+const { spawnSync } = require('node:child_process');
+process.env.LC_ALL = 'C'; // git's sentences in English whatever the machine's language (#762)
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { declared } = require('../lib/where-it-lands.js');
+
+// Pinned, because jscpd 5 is another program with another report.
+const JSCPD = 'jscpd@4.0.5';
+const temporary = [];
+const answer = (why, comment = null) => {
+  temporary.forEach((folder) => fs.rmSync(folder, { recursive: true, force: true }));
+  process.stdout.write(`${JSON.stringify({ outcome: 'reported', published: comment !== null, comment, why: why.replace(/\s+/g, ' ').trim() })}\n`);
+  process.exit(0);
+};
+const env = { ...process.env, GH_PAGER: 'cat', GH_PROMPT_DISABLED: '1', NO_COLOR: '1' };
+const run = (command, args, cwd, extra = {}) => spawnSync(command, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+const lines = (step) => `${step.stdout || ''}\n${step.stderr || ''}`.split('\n').map((line) => line.trim()).filter(Boolean);
+const said = (step) => (step.error ? `${step.error.code}` : (lines(step).pop() || `exit ${step.status}`).slice(0, 300));
+const scratch = () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'aio-quality-'));
+  temporary.push(folder);
+  return folder;
+};
+const short = (sha) => (sha || '').slice(0, 7);
+const percent = (value) => `${(Math.round(value * 1000) / 10).toFixed(1)}%`;
+const plural = (count, one, other = `${one}s`) => `${count} ${count === 1 ? one : other}`;
+
+const issue = process.argv[2] || '';
+if (!/^\d+$/.test(issue)) answer('Nothing published: quality needs the issue number.');
+const top = run('git', ['rev-parse', '--show-toplevel'], process.cwd()).stdout?.trim();
+if (!top) answer(`Nothing published: ${process.cwd()} is not a git checkout.`);
+// Resolved, because a report names files by the path its tool saw, and /var is /private/var on macOS.
+const root = fs.realpathSync(top);
+const head = run('git', ['rev-parse', 'HEAD'], root).stdout.trim();
+const committed = Number(run('git', ['show', '-s', '--format=%ct', 'HEAD'], root).stdout.trim()) * 1000;
+
+const file = path.join(root, '.aio', 'config.json');
+let config = {};
+if (fs.existsSync(file)) {
+  try {
+    config = JSON.parse(fs.readFileSync(file, 'utf8').split('\n').filter((line) => !line.trim().startsWith('//')).join('\n')).quality || {};
+  } catch (error) {
+    answer(`Nothing published: .aio/config.json is not JSON: ${error.message}`);
+  }
+}
+const section = (name) => (config[name] && typeof config[name] === 'object' ? config[name] : {});
+const number = (value, fallback) => (typeof value === 'number' && Number.isFinite(value) ? value : fallback);
+const report = (name) => (typeof section(name).report === 'string' && section(name).report ? section(name).report : null);
+
+const pr = run('gh', ['pr', 'view', '--json', 'baseRefName', '--jq', '.baseRefName'], root);
+const trunk = pr.status === 0 && pr.stdout.trim() ? `origin/${pr.stdout.trim()}` : 'origin/HEAD';
+const merged = run('git', ['merge-base', 'HEAD', trunk], root);
+const base = merged.status === 0 ? merged.stdout.trim() : null;
+
+const ok = (check, measured, line) => ({ check, measured, line, result: 'ok' });
+const over = (check, measured, line) => ({ check, measured, line, result: 'over' });
+const unmeasured = (check, why, line) => ({ check, measured: why, line, result: 'not measured' });
+const judged = (check, measured, line, past) => (past ? over : ok)(check, measured, line);
+
+/** Why a report is not the head's, from its own stamp or, without one, from its age; null when it is. */
+function stale(stamp, at) {
+  if (stamp) return stamp === head ? null : `measured on ${short(stamp)}, not on the head ${short(head)}`;
+  return at < committed ? `measured before ${short(head)} was committed` : null;
+}
+
+/** The `# commit` line of the crap report, which the same step writes beside the coverage. */
+function crapStamp() {
+  const named = report('crap');
+  if (!named || !fs.existsSync(path.resolve(root, named))) return null;
+  return (/^# commit\t([0-9a-f]+)$/m.exec(fs.readFileSync(path.resolve(root, named), 'utf8')) || [])[1] || null;
+}
+
+/** The lines the change added or rewrote, per file on the head's side. */
+function added() {
+  const diff = run('git', ['diff', '-U0', '--no-color', '--no-ext-diff', base, head], root);
+  const files = new Map();
+  let current = null;
+  for (const line of diff.stdout.split('\n')) {
+    if (line.startsWith('+++ ')) {
+      current = line === '+++ /dev/null' ? null : line.slice(6);
+      if (current && !files.has(current)) files.set(current, []);
+    } else if (line.startsWith('@@ ') && current) {
+      const [, start, count] = /\+(\d+)(?:,(\d+))?/.exec(line) || [];
+      const first = Number(start);
+      for (let at = first; at < first + (count === undefined ? 1 : Number(count)); at += 1) files.get(current).push(at);
+    }
+  }
+  return files;
+}
+
+/** A path in a report as a path from the top of this checkout, resolving the temporary folder's links. */
+function relative(name, sources) {
+  const candidates = path.isAbsolute(name) ? [name] : [...sources.map((source) => path.join(source, name)), path.join(root, name)];
+  for (const candidate of candidates) {
+    const real = fs.existsSync(candidate) ? fs.realpathSync(candidate) : candidate;
+    const from = path.relative(root, real);
+    if (!from.startsWith('..') && !path.isAbsolute(from)) return from.split(path.sep).join('/');
+  }
+  return name.replace(/\\/g, '/');
+}
+
+const COVERAGE = 'Coverage of changed lines';
+function coverage() {
+  const min = number(section('coverage').min, 70);
+  const line = `${min}%`;
+  const named = report('coverage');
+  if (!named) return unmeasured(COVERAGE, 'quality in .aio/config.json names no coverage report', line);
+  const where = path.resolve(root, named);
+  if (!fs.existsSync(where)) return unmeasured(COVERAGE, `no ${path.basename(named)} at ${named}`, line);
+  const old = stale(crapStamp(), fs.statSync(where).mtimeMs);
+  if (old) return unmeasured(COVERAGE, `${named} was ${old}`, line);
+
+  const xml = fs.readFileSync(where, 'utf8');
+  const sources = [...xml.matchAll(/<source>([^<]+)<\/source>/g)].map((match) => match[1].trim());
+  const hits = new Map();
+  for (const match of xml.matchAll(/<class\b[^>]*\bfilename="([^"]+)"[^>]*>([\s\S]*?)<\/class>/g)) {
+    const name = relative(match[1], sources);
+    const known = hits.get(name) || new Map();
+    for (const one of match[2].matchAll(/<line\b[^>]*\bnumber="(\d+)"[^>]*\bhits="(\d+)"/g)) {
+      known.set(Number(one[1]), Math.max(known.get(Number(one[1])) || 0, Number(one[2])));
+    }
+    hits.set(name, known);
+  }
+  let coverable = 0;
+  let covered = 0;
+  for (const [name, numbers] of added()) {
+    const known = hits.get(name);
+    if (!known) continue;
+    for (const at of numbers.filter((one) => known.has(one))) {
+      coverable += 1;
+      if (known.get(at) > 0) covered += 1;
+    }
+  }
+  if (coverable === 0) return ok(COVERAGE, 'no changed line the report can cover', line);
+  const share = covered / coverable;
+  return judged(COVERAGE, `${percent(share)}: ${covered} of ${plural(coverable, 'changed line')} covered`, line, share * 100 < min);
+}
+
+/**
+ * The issue's Dónde cae as the pattern file CHECK_DECLARED names: each path as itself and, its trailing
+ * slash gone, with `/*` after it, so a folder covers what sits under it. No file when the issue declares
+ * no path; `problem` when it could not be read.
+ */
+function where() {
+  const read = run('gh', ['issue', 'view', issue, '--json', 'body', '--jq', '.body'], root);
+  if (read.status !== 0) return { file: null, problem: `#${issue} could not be read: ${said(read)}` };
+  const paths = declared(read.stdout || '') || [];
+  if (!paths.length) return { file: null, problem: null };
+  const file = path.join(scratch(), 'declared');
+  const patterns = paths.map((one) => one.replace(/^\.\//, '').replace(/\/+$/, '')).filter(Boolean);
+  fs.writeFileSync(file, `${patterns.flatMap((one) => [one, `${one}/*`]).join('\n')}\n`);
+  return { file, problem: null };
+}
+const issueWhere = base ? where() : { file: null, problem: null };
+
+/** Runs one of the package's checks against the base: its exit code and what it said. */
+function checked(name, extra) {
+  const given = issueWhere.file ? { CHECK_DECLARED: issueWhere.file } : {};
+  const step = run('bash', [path.join(__dirname, '..', 'checks', `${name}.sh`)], root, { CHECK_BASE: base, ...given, ...extra });
+  return { code: step.error ? -1 : step.status, said: lines(step), last: said(step) };
+}
+
+/** The findings of a check that printed `<prefix><what>` once per finding. */
+const found = (step, prefix) => step.said.filter((one) => one.startsWith(prefix)).map((one) => one.slice(prefix.length));
+
+const CRAP = 'CRAP of touched methods';
+function crap() {
+  const max = number(section('crap').max, 30);
+  const line = String(max);
+  const named = report('crap');
+  if (!named) return unmeasured(CRAP, 'quality in .aio/config.json names no crap report', line);
+  // The line at 0 lists every touched method, so the highest is known too.
+  const step = checked('crap', { CHECK_CRAP: named, CHECK_CRAP_MAX: '0' });
+  if (step.code === 0) return ok(CRAP, 'no method touched', line);
+  const scores = step.said.map((one) => /^CRAP ([\d.]+)/.exec(one)).filter(Boolean).map((one) => Number(one[1]));
+  if (step.code !== 1 || !scores.length) return unmeasured(CRAP, step.last, line);
+  const past = scores.filter((score) => score > max).length;
+  return judged(CRAP, `highest ${Math.max(...scores).toFixed(1)} of ${plural(scores.length, 'method')}, ${past} over ${max}`, line, past > 0);
+}
+
+const MUTATION = 'Mutation in touched files';
+function mutation() {
+  const line = 'reported only';
+  const named = report('mutation');
+  if (!named) return unmeasured(MUTATION, 'quality in .aio/config.json names no mutation report', line);
+  const where = path.resolve(root, named);
+  if (!fs.existsSync(where)) return unmeasured(MUTATION, `no ${path.basename(named)} at ${named}`, line);
+  let summary;
+  try {
+    summary = JSON.parse(fs.readFileSync(where, 'utf8'));
+  } catch (error) {
+    return unmeasured(MUTATION, `${named} is not JSON: ${error.message}`, line);
+  }
+  // The summary names the base it measured since, not the head: its age says whether it is the head's.
+  if (summary.since && summary.since !== base) return unmeasured(MUTATION, `${named} was measured since ${short(summary.since)}, not since the base ${short(base)}`, line);
+  const old = stale(null, fs.statSync(where).mtimeMs);
+  if (old) return unmeasured(MUTATION, `${named} was ${old}`, line);
+  if (summary.measured === false) return unmeasured(MUTATION, summary.reason || `${named} says it measured nothing`, line);
+  const projects = Array.isArray(summary.projects) ? summary.projects : [];
+  if (!projects.length) return ok(MUTATION, 'no changed source file to mutate', line);
+  const measured = projects.filter((project) => project.measured);
+  if (!measured.length) return unmeasured(MUTATION, `${projects[0].project}: ${projects[0].reason || 'not measured'}`, line);
+  const detected = measured.reduce((sum, project) => sum + (project.detected || 0), 0);
+  const valid = measured.reduce((sum, project) => sum + (project.valid || 0), 0);
+  const left = projects.length - measured.length;
+  const score = valid ? `${percent(detected / valid)}: ${detected} of ${plural(valid, 'mutant')} killed` : 'no mutant to kill';
+  return ok(MUTATION, `${score}${left ? `; ${plural(left, 'project')} not measured` : ''}`, line);
+}
+
+/** The lines of each file that sit inside a clone, as jscpd reports them run in that folder. */
+function clones(folder, paths) {
+  const output = path.join(scratch(), 'report');
+  const step = run('npx', ['--yes', JSCPD, '--min-lines', '10', '--min-tokens', '70', '--reporters', 'json', '--output', output, '--silent',
+    '--gitignore', '--ignore', '**/node_modules/**,**/bin/**,**/obj/**', ...paths], folder);
+  const json = path.join(output, 'jscpd-report.json');
+  if (step.status !== 0 || !fs.existsSync(json)) return { problem: `jscpd failed: ${said(step)}` };
+  const spans = new Map();
+  for (const duplicate of JSON.parse(fs.readFileSync(json, 'utf8')).duplicates || []) {
+    for (const side of [duplicate.firstFile, duplicate.secondFile].filter(Boolean)) {
+      const name = (path.isAbsolute(side.name) ? path.relative(folder, side.name) : side.name).replace(/^\.\//, '').split(path.sep).join('/');
+      const set = spans.get(name) || new Set();
+      for (let at = side.start; at <= side.end; at += 1) set.add(at);
+      spans.set(name, set);
+    }
+  }
+  return { lines: new Map([...spans].map(([name, set]) => [name, set.size])) };
+}
+
+const DUPLICATION = 'New duplicated lines';
+function duplication() {
+  const max = number(section('duplication').max, 0);
+  const line = String(max);
+  const given = section('duplication').paths;
+  const paths = Array.isArray(given) && given.length ? given : ['.'];
+  const touched = run('git', ['diff', '--name-status', '-M', '--diff-filter=AMR', base, head], root).stdout.split('\n').filter(Boolean)
+    .map((entry) => entry.split('\t'))
+    .map(([status, old, renamed]) => ({ now: renamed || old, then: status.startsWith('A') ? null : old }));
+  if (!touched.length) return ok(DUPLICATION, 'no file touched', line);
+
+  const now = clones(root, paths);
+  if (now.problem) return unmeasured(DUPLICATION, now.problem, line);
+  const folder = scratch();
+  const tar = path.join(folder, 'base.tar');
+  const tree = path.join(folder, 'tree');
+  fs.mkdirSync(tree);
+  const archived = run('git', ['archive', '--output', tar, base], root);
+  const unpacked = archived.status === 0 ? run('tar', ['-xf', tar, '-C', tree], root) : archived;
+  if (unpacked.status !== 0) return unmeasured(DUPLICATION, `the base ${short(base)} could not be read: ${said(unpacked)}`, line);
+  const then = clones(tree, paths);
+  if (then.problem) return unmeasured(DUPLICATION, then.problem, line);
+
+  const grown = touched
+    .map((one) => ({ name: one.now, lines: (now.lines.get(one.now) || 0) - (one.then ? then.lines.get(one.then) || 0 : 0) }))
+    .filter((one) => one.lines > 0);
+  const total = grown.reduce((sum, one) => sum + one.lines, 0);
+  if (!total) return ok(DUPLICATION, 'no new duplicated line', line);
+  const files = grown.map((one) => `${one.name} ${one.lines}`).join(', ');
+  return judged(DUPLICATION, `${plural(total, 'line')} in ${plural(grown.length, 'file')}: ${files}`, line, total > max);
+}
+
+const TESTS = 'Tests lost or skipped';
+function tests() {
+  const max = number(section('tests').max, 0);
+  const line = String(max);
+  const step = checked('tests-lost-or-skipped', {});
+  if (step.code === 0) return ok(TESTS, 'none lost or skipped', line);
+  if (step.code !== 1) return unmeasured(TESTS, step.last, line);
+  const lost = step.said.filter((one) => one.startsWith('lost test: ')).map((one) => one.slice('lost test: '.length));
+  const skipped = step.said.filter((one) => one.startsWith('skip added in ')).length;
+  const named = `${lost.length ? `${lost.length} lost: ${lost.join(', ')}` : '0 lost'}; ${skipped} skipped`;
+  return judged(TESTS, named, line, lost.length + skipped > max);
+}
+
+const TOUCHED = 'Tests touched';
+function touched() {
+  const max = number(section('touched').max, 0);
+  const line = String(max);
+  const step = checked('tests-touched', {});
+  if (step.code === 0) return ok(TOUCHED, 'no test that stood at the base touched', line);
+  const files = step.said.map((one) => /^existing test ([A-Z]): (.+)$/.exec(one)).filter(Boolean).map((one) => `${one[2]} (${one[1]})`);
+  if (step.code !== 1 || !files.length) return unmeasured(TOUCHED, step.last, line);
+  return judged(TOUCHED, `${files.length}: ${files.join(', ')}`, line, files.length > max);
+}
+
+const OUTSIDE = "Files outside the issue's paths";
+function outside() {
+  const max = number(section('outside').max, 0);
+  const line = String(max);
+  if (issueWhere.problem) return unmeasured(OUTSIDE, issueWhere.problem, line);
+  const step = checked('out-of-seam', {});
+  if (step.code === 0) return ok(OUTSIDE, "every file inside the issue's paths", line);
+  const files = found(step, 'undeclared: ');
+  if (step.code !== 1 || !files.length) return unmeasured(OUTSIDE, step.last, line);
+  return judged(OUTSIDE, `${plural(files.length, 'file')}: ${files.join(', ')}`, line, files.length > max);
+}
+
+const OLD_TESTS = 'New code on old tests only';
+function oldTests() {
+  const max = number(section('old-tests').max, 0);
+  const line = String(max);
+  const step = checked('old-tests-new-code', {});
+  if (step.code === 0) return ok(OLD_TESTS, 'no old test fails against the new code', line);
+  const failing = found(step, 'fails in its base form: ');
+  if (step.code !== 1 || !failing.length) return unmeasured(OLD_TESTS, step.last, line);
+  return judged(OLD_TESTS, `${plural(failing.length, 'test')} failing in its base form: ${failing.join(', ')}`, line, failing.length > max);
+}
+
+const measures = [
+  [COVERAGE, coverage], [CRAP, crap], [MUTATION, mutation], [DUPLICATION, duplication], [TESTS, tests],
+  [TOUCHED, touched], [OUTSIDE, outside], [OLD_TESTS, oldTests],
+];
+const rows = measures.map(([check, measure]) => (base ? measure() : unmeasured(check, `${trunk} is not a base this checkout has: ${said(merged)}`, '')));
+const cell = (text) => String(text).replace(/\|/g, '/').replace(/\s+/g, ' ').trim();
+const counted = ['over', 'not measured'].map((result) => `${rows.filter((row) => row.result === result).length} ${result}`).join(', ');
+
+const body = path.join(scratch(), 'body.md');
+fs.writeFileSync(body, [
+  `<!-- aio:quality ${head} -->`,
+  `Quality of \`${short(head)}\` against \`${short(base)}\` for #${issue}: ${counted}. It reports and blocks nothing; each line is quality in .aio/config.json.`,
+  '',
+  '| Check | Measured | Line | Result |',
+  '| --- | --- | --- | --- |',
+  ...rows.map((row) => `| ${[row.check, row.measured, row.line, row.result].map(cell).join(' | ')} |`),
+  '',
+].join('\n'));
+const gh = run('gh', ['issue', 'comment', issue, '--body-file', body], root);
+const url = (`${gh.stdout || ''}`.match(/https:\/\/\S+#issuecomment-\d+/) || [])[0];
+if (gh.status !== 0 || !url) answer(`Nothing published: gh could not comment: ${said(gh)}. Measured ${short(head)}: ${counted}.`);
+answer(`Published the quality of ${short(head)} in ${url}: ${counted}.`, url);

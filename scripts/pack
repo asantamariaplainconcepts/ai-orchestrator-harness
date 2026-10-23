@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Packs the app as the .NET tool `aio` (#678): builds the frontend into the Server's wwwroot, then
+# `dotnet pack`s the Server into artifacts/aio.<Version>.nupkg, <Version> from src/Directory.Build.props.
+# Try it without installing anything with `dnx aio --add-source ./artifacts`.
+#
+#   scripts/pack
+#
+# This repository's own, like release: the harness package does not carry it. It publishes nothing.
+set -euo pipefail
+
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# The SPA first: wwwroot is read when the pack is evaluated, so packing before it would ship the previous build.
+( cd "$repo/src/frontend" && pnpm install --frozen-lockfile && pnpm build )
+
+# ContinuousIntegrationBuild maps source paths to /_/: the package is public, and without it every
+# assembly and pdb carries the absolute path of the checkout that packed it.
+dotnet pack "$repo/src/root/AiOrchestrator.Server/AiOrchestrator.Server.csproj" -c Release --nologo -v q \
+  -p:ContinuousIntegrationBuild=true
+
+version="$(dotnet msbuild "$repo/src/root/AiOrchestrator.Server/AiOrchestrator.Server.csproj" -getProperty:Version -nologo)"
+package="$repo/artifacts/aio.$version.nupkg"
+
+# Checked rather than assumed: a package without the bundle installs and opens on a 404. Not
+# `grep -q`: it stops at the first match, unzip dies of SIGPIPE, and pipefail fails the pack.
+unzip -Z1 "$package" | grep -x "tools/net10.0/any/wwwroot/index.html" >/dev/null || { echo "the package has no wwwroot/index.html: $package" >&2; exit 1; }
+
+echo "$package"

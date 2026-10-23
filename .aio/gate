@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# The gate of this repository: `aspire do ci` over the checkout it runs in, the whole of it. Answers
+# one JSON line, {outcome, go, why}: outcome green and exit 0 when the pipeline succeeded, red and
+# exit 1 when it did not. The engine reads outcome and why; go is for a person reading the line.
+#
+#   .aio/gate [issue]
+#
+# - `verifying` runs it in the PBI's worktree, on its branch, and passes the PBI's number. The number
+#   is accepted and not used: what the gate tests is the branch checked out here.
+# - The why carries what the run counted: the steps, the test assemblies and the tests passed, read
+#   from src/artifacts/ci-summary.json. A smaller count than the last run is a subset, not a success,
+#   and the person reading the Journey is the one who can tell.
+# - The whole output goes to a file outside the tree, named in the why, so a red gate can be read
+#   without running it again.
+# - Holds and the WIP limit are not this file's: the engine checks both before a PBI gets here.
+# - A run's own variables do not reach the tests. AIO_DONE_FILE names the end record of the agent run
+#   this was started from, if any, and EndRecordTests runs `aio done merged`: inherited, that test
+#   wrote the run's record and ended the run (#590).
+set -uo pipefail
+unset AIO_DONE_FILE
+
+say() { # say <go> <why>
+  printf '{"outcome": "%s", "go": %s, "why": "%s"}\n' "$([ "$1" = true ] && echo green || echo red)" "$1" \
+    "$(printf '%s' "$2" | tr '\n"\\' "  '")"
+}
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || { say false "gate: $(pwd) is not a git checkout"; exit 1; }
+apphost="$root/src/root/AiOrchestrator.AppHost/AiOrchestrator.AppHost.csproj"
+[ -f "$apphost" ] || { say false "gate: $root has no AppHost at src/root/AiOrchestrator.AppHost"; exit 1; }
+command -v aspire >/dev/null 2>&1 || { say false "gate: aspire is not on PATH, so nothing was run"; exit 1; }
+
+tmp="${TMPDIR:-/tmp}"
+log="${tmp%/}/aio-gate-$(git -C "$root" rev-parse --short HEAD 2>/dev/null || echo unknown)-$$.log"
+summary="$root/src/artifacts/ci-summary.json"
+rm -f "$summary"
+
+(cd "$root" && aspire do ci --apphost "$apphost") >"$log" 2>&1
+code=$?
+
+steps=$(sed -n 's/.*[^0-9]\([0-9][0-9]*\/[0-9][0-9]*\) steps succeeded.*/\1/p' "$log" | tail -1)
+counted=$(node -e '
+  try {
+    const s = require(process.argv[1]);
+    const a = s.assemblies ?? [];
+    const sum = (k) => a.reduce((n, x) => n + (x[k] ?? 0), 0);
+    process.stdout.write(`${a.length} test assemblies, ${sum("passedTests")} tests passed, ${sum("failed")} failed`);
+  } catch {}' "$summary" 2>/dev/null)
+
+if [ "$code" -eq 0 ]; then
+  say true "aspire do ci passed: ${steps:-every} steps succeeded${counted:+, $counted}. Log: $log"
+  exit 0
+fi
+
+# The step Aspire marked as failed, or the test run that failed inside it.
+failed=$( { grep -m1 '✗' "$log" || grep -m1 'Failed!' "$log"; } | sed 's/^[0-9:]* //' | cut -c1-200)
+say false "aspire do ci failed (exit $code)${failed:+: $failed}${counted:+. $counted}. Log: $log"
+exit 1

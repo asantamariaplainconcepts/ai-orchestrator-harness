@@ -1,0 +1,16 @@
+# The Sandbox backend 4b attaches to. On kind it runs under runc. sandbox-kata.yaml is this file
+# with `runtimeClassName: kata-qemu`, for backend 4; on AKS it would be `kata-vm-isolation` and the
+# Kata pool's nodeSelector — nothing else changes, which is the point the demo makes.
+apiVersion: agents.x-k8s.io/v1beta1
+kind: Sandbox
+metadata:
+  name: pty-demo
+spec:
+  podTemplate:
+    spec:
+      containers:
+        - name: agent
+          image: docker.io/library/alpine:3.22
+          command: ["sleep", "infinity"]
+          resources:
+            limits: { cpu: "1", memory: 512Mi }

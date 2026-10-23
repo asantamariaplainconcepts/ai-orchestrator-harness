@@ -1,0 +1,300 @@
+/* The only hand-written CSS in the app. Everything else is a design-system token or class. */
+
+/* The missing half of the vendored import, not a local override of it.
+ *
+ * `components.css` says in its own header that it was transcribed from shadcn/ui sources "with
+ * Tailwind utilities resolved to their px values" — and Tailwind's preflight is what sets
+ * border-box. The components came across; the preflight did not, and nothing in src/frontend/ set
+ * it. So every `.pc-input` was `width: 100%` plus 0.75rem of padding and a 1px border: 26px wider
+ * than its container, which the 520px Add a folder dialog was narrow enough to make visible as a
+ * clipped right edge and a horizontal scrollbar.
+ *
+ * It belongs here rather than in components.css because that file is generated and a local edit
+ * there is drift the next import silently reverts (DESIGN.md). This file is hand-written and is
+ * imported after it (app/main.tsx:6-8). */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+/* Hover states the vendored kit does not carry, because upstream expresses them as Tailwind
+ * utilities on the element rather than as component CSS. */
+.row-hover:hover {
+  background: color-mix(in srgb, var(--muted) 50%, transparent);
+}
+
+/* Rendered markdown in the Files preview. react-markdown emits bare elements, so the document's
+ * typography lives here — every value a token, nothing themed. */
+
+/* A path, a URL or a `--flag` in inline code is one unbroken token, and this repository's issues are
+ * written almost entirely out of them. At the 720px the run's Issue tab and the folder's give a body
+ * that overflows rarely; in the Tasks panel's 388px column it overflows constantly, and because that
+ * panel is itself `overflow: auto`, an unbreakable word scrolls Start run out of the column sideways
+ * rather than being clipped. Breaking mid-token is exactly right for a path and costs nothing for
+ * prose, which still breaks at spaces first. #204.
+ */
+.markdown-preview {
+  overflow-wrap: anywhere;
+}
+/* One level down: the renderer draws markdown's `#` as an h2 so the screen keeps its one h1 (#586). */
+.markdown-preview h2,
+.markdown-preview h3,
+.markdown-preview h4,
+.markdown-preview h5 {
+  margin: 0.8em 0 0.4em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.markdown-preview h2 {
+  font-size: var(--text-lg);
+}
+.markdown-preview h3 {
+  font-size: var(--text-base);
+}
+.markdown-preview h4 {
+  font-size: var(--text-sm);
+}
+.markdown-preview h5 {
+  font-size: var(--text-sm);
+}
+.markdown-preview p,
+.markdown-preview ul,
+.markdown-preview ol,
+.markdown-preview blockquote,
+.markdown-preview pre,
+.markdown-preview table {
+  margin: 0.5em 0;
+}
+.markdown-preview ul,
+.markdown-preview ol {
+  padding-left: 1.4em;
+}
+
+/* One rendered line inside a row that already has its own padding.
+ *
+ * The margin above is right for a body, where consecutive paragraphs need to breathe, and wrong for
+ * a single line in a list row: it lands inside the row's padding and pushes the text off the marker
+ * beside it. Only the outer edges go, so a row that does have two paragraphs still separates them.
+ * #185.
+ */
+.markdown-preview--flush > :first-child {
+  margin-top: 0;
+}
+.markdown-preview--flush > :last-child {
+  margin-bottom: 0;
+}
+.markdown-preview a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.markdown-preview code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--muted);
+  border-radius: var(--radius-md);
+  padding: 0.1em 0.35em;
+}
+.markdown-preview pre {
+  background: var(--muted);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  overflow: auto;
+}
+.markdown-preview pre code {
+  background: none;
+  padding: 0;
+}
+.markdown-preview blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 12px;
+  color: var(--muted-foreground);
+}
+.markdown-preview table {
+  border-collapse: collapse;
+}
+.markdown-preview th,
+.markdown-preview td {
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+}
+.markdown-preview th {
+  background: var(--muted);
+  text-align: left;
+}
+.markdown-preview hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 1em 0;
+}
+
+/* #611. A Mermaid block drawn as its diagram: as wide as the text at most, scrolled rather than
+ * squeezed when its labels cannot shrink further. */
+.aio-mermaid {
+  margin: 0.5em 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.aio-mermaid__svg svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.aio-mermaid__drawing {
+  display: block;
+  padding: 10px 12px;
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+}
+.aio-mermaid__error {
+  font-size: var(--text-xs);
+  color: var(--destructive);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* #509. The rail's links and folder rows are plain anchors and buttons, outside the kit's
+ * `.pc-btn`, so they take the shared focus treatment here (DESIGN.md rule 6). */
+.aio-rail-row:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* #510. The Loop screen's rows and decisions are links that open a PBI's Journey. */
+.aio-loop-row:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* #511. A run's row in the Journey is a plain button that unfolds it, outside the kit's `.pc-btn`,
+ * so it takes the shared focus treatment and the kit's colour-only hover here. */
+.aio-journey-run {
+  background-color: transparent;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+.aio-journey-run:hover {
+  background-color: var(--muted);
+}
+.aio-journey-run:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* asciinema-player paints its built-in theme in raw hex. The recording sits on the terminal surface
+ * in both themes, like the live terminal (DESIGN.md, the one deliberate exception), so its two
+ * surface colours point at the same tokens the live terminal reads. */
+.aio-recording .asciinema-player-theme-asciinema {
+  --term-color-foreground: var(--pc-neutral-50);
+  --term-color-background: var(--pc-neutral-900);
+}
+
+/* #515. A row of the PBIs list fills a bordered list that clips what overflows its corners, so the
+ * same ring is drawn inside the row rather than around it. Hover is a surface change, colour only. */
+.aio-list-row {
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+.aio-list-row:hover {
+  background: var(--accent);
+}
+.aio-list-row:focus-visible {
+  outline: none;
+  box-shadow: inset var(--focus-ring);
+}
+
+/* #512. An image inside an issue or a change is a plain button that enlarges it, outside the kit's
+ * `.pc-btn`, so it takes the shared focus treatment here. */
+.aio-image {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background-color: var(--muted);
+  cursor: zoom-in;
+  overflow: hidden;
+  vertical-align: top;
+}
+.aio-image img {
+  display: block;
+  max-width: 100%;
+}
+.aio-image:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* #512. A line of a change in the Proposal tab: hovering it or tabbing into it shows the button that
+ * anchors a comment to it. Colour and opacity only. */
+.aio-proposal-line {
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+.aio-proposal-line:hover,
+.aio-proposal-line:focus-within {
+  background-color: var(--muted);
+}
+.aio-proposal-line .aio-proposal-anchor {
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+.aio-proposal-line:hover .aio-proposal-anchor,
+.aio-proposal-line:focus-within .aio-proposal-anchor {
+  opacity: 1;
+}
+.aio-proposal-line--threaded {
+  box-shadow: inset 3px 0 0 var(--warning);
+}
+.aio-proposal-file:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* #512. The composer of the Issue tab shows where an image may be dropped while one is dragged over it. */
+.aio-composer--dropping {
+  border-color: var(--primary);
+  background-color: var(--accent);
+}
+
+/* #578. One of several, as native radios inside labelled rows (the kit's `Choices`): the arrows move
+ * the choice, as a radio group's should. The radio takes the shared focus treatment, and the chosen
+ * row a surface change, colour only. */
+.aio-choice {
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+.aio-choice:has(input:checked) {
+  background-color: var(--accent);
+}
+.aio-choice input {
+  accent-color: var(--primary);
+}
+.aio-choice input:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* #734. A number on the Metrics screen that lists what it counts: the link colour and an underline,
+ * so it reads as something to press, and the shared focus treatment. */
+.aio-figure {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.aio-figure:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}

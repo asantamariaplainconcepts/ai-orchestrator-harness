@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>AiOrchestrator.Modules.Runs.FunctionalTests</RootNamespace>
+    <AssemblyName>AiOrchestrator.Modules.Runs.FunctionalTests</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="coverlet.collector" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AiOrchestrator.SharedFunctionalTests\AiOrchestrator.SharedFunctionalTests.csproj" />
+    <ProjectReference Include="..\..\modules\Runs\AiOrchestrator.Modules.Runs\AiOrchestrator.Modules.Runs.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="Shouldly" />
+  </ItemGroup>
+
+  <ItemGroup>
+  </ItemGroup>
+</Project>

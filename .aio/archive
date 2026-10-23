@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# The archive, first script of `merging`. Archives this branch's OpenSpec change, commits the result
+# and pushes it, and answers one JSON line: {ok, archived, open, observed, why}. Exit 0 when the
+# branch is ready for `merge`, 1 when it is not.
+#
+#   .aio/archive [--base <ref>] [<change>]
+#
+# - A change with an open task is refused, and every open checkbox of its tasks.md is named in
+#   `open` as "tasks.md:<line> <text>". `openspec archive --yes` warns about open tasks and archives
+#   anyway, and on 7 October four changes were archived that way; the rule lived in /aio:sync's prose
+#   and nothing checked it.
+# - The change is the one named, or the one this branch added under openspec/changes/ against the
+#   base: --base, else the pull request's base at origin, else origin/HEAD. A branch with no
+#   change has nothing to refuse and answers ok. Two changes refuse, naming both: which one lands is
+#   not this script's guess.
+# - A change with no specs/ folder is archived with --skip-specs.
+# - The archive is committed and pushed, because `merge` squash-merges what the vendor holds. The
+#   push is read back: `observed` is true when origin's branch is this HEAD.
+set -uo pipefail
+
+export GH_PAGER=cat GH_PROMPT_DISABLED=1 GIT_TERMINAL_PROMPT=0
+
+say() { # say <ok> <archived|null> <open json array> <observed> <why>
+  local why
+  why=$(printf '%s' "$5" | tr '\n"\\' "  '" | sed 's/  */ /g; s/ $//')
+  printf '{"ok": %s, "archived": %s, "open": %s, "observed": %s, "why": "%s"}\n' "$1" "$2" "$3" "$4" "$why"
+}
+
+base=""
+named=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --base) base="${2:-}"; shift 2 ;;
+    -*) say false null '[]' false "archive: unknown option $1"; exit 1 ;;
+    *) named="$1"; shift ;;
+  esac
+done
+
+top=$(git rev-parse --show-toplevel 2>/dev/null) || { say false null '[]' false "archive: $(pwd) is not a git checkout"; exit 1; }
+cd "$top" || exit 1
+changes="openspec/changes"
+
+if [ -z "$named" ]; then
+  if [ ! -d "$changes" ]; then
+    say true null '[]' false "This checkout has no $changes/: no OpenSpec change, nothing to archive."
+    exit 0
+  fi
+  if [ -z "$base" ]; then
+    pr_base=$(gh pr view --json baseRefName --jq .baseRefName 2>/dev/null || true)
+    if [ -n "$pr_base" ] && git rev-parse -q --verify "origin/$pr_base^{commit}" >/dev/null; then
+      base="origin/$pr_base"
+    else
+      base="origin/HEAD"
+    fi
+  fi
+  git rev-parse -q --verify "$base^{commit}" >/dev/null || {
+    say false null '[]' false "archive: the base $base names no commit here, so this branch's change cannot be told apart. Pass --base or the change's name."
+    exit 1
+  }
+  found=()
+  while IFS= read -r name; do
+    [ -n "$name" ] && [ "$name" != archive ] && [ -d "$changes/$name" ] && found+=("$name")
+  done < <(git diff --name-only "$base"...HEAD -- "$changes" | cut -d/ -f3 | sort -u)
+  if [ "${#found[@]}" -eq 0 ]; then
+    say true null '[]' false "This branch adds no OpenSpec change against $base: nothing to archive."
+    exit 0
+  fi
+  if [ "${#found[@]}" -gt 1 ]; then
+    say false null '[]' false "This branch touches ${#found[@]} OpenSpec changes against $base (${found[*]}). Name the one to archive."
+    exit 1
+  fi
+  named="${found[0]}"
+fi
+
+dir="$changes/$named"
+[ -d "$dir" ] || { say false null '[]' false "archive: there is no change $dir."; exit 1; }
+
+# Every open checkbox, with its line, so the refusal says which tasks rather than how many.
+open='[]'
+count=0
+if [ -f "$dir/tasks.md" ]; then
+  open=$(grep -n -E '^[[:space:]]*[-*] \[ \]' "$dir/tasks.md" |
+    sed -E 's/^([0-9]+):[[:space:]]*[-*] \[ \][[:space:]]*/\1 /' |
+    awk 'BEGIN { printf "[" } { line = $1; $1 = ""; sub(/^ /, ""); gsub(/\\/, "\\\\"); gsub(/"/, "\\\""); printf "%s\"tasks.md:%s %s\"", (NR > 1 ? ", " : ""), line, $0 } END { printf "]" }')
+  count=$(grep -c -E '^[[:space:]]*[-*] \[ \]' "$dir/tasks.md")
+fi
+if [ "$count" -gt 0 ]; then
+  say false null "$open" false "Change $named has $count open task(s) in $dir/tasks.md; close or remove each before archiving. Nothing was archived."
+  exit 1
+fi
+
+dirty=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+[ "$dirty" = 0 ] || { say false null '[]' false "$dirty uncommitted files here would be swept into the archive commit. Commit or discard them; nothing was archived."; exit 1; }
+
+args=(archive "$named" --yes)
+[ -d "$dir/specs" ] || args+=(--skip-specs)
+if ! said=$(openspec "${args[@]}" 2>&1); then
+  say false null '[]' false "openspec archive refused $named: $said"
+  exit 1
+fi
+if [ -d "$dir" ]; then
+  say false null '[]' false "openspec archive answered but $dir is still there: $said"
+  exit 1
+fi
+
+git add -A openspec >/dev/null 2>&1
+if ! committed=$(git commit -q -m "Archivar el change $named" 2>&1); then
+  say false null '[]' false "The archive of $named could not be committed: $committed"
+  exit 1
+fi
+
+branch=$(git rev-parse --abbrev-ref HEAD)
+head=$(git rev-parse HEAD)
+if ! pushed=$(git push -q origin "HEAD:refs/heads/$branch" 2>&1); then
+  say false "\"$named\"" '[]' false "Change $named is archived in commit $head, but the push of $branch was refused: $pushed"
+  exit 1
+fi
+
+at=$(git ls-remote origin "refs/heads/$branch" 2>/dev/null | cut -f1)
+if [ "$at" = "$head" ]; then
+  say true "\"$named\"" '[]' true "Change $named is archived in $head, and origin's $branch is that commit."
+  exit 0
+fi
+say false "\"$named\"" '[]' false "Change $named is archived in $head and pushed, but origin's $branch reads ${at:-nothing}."
+exit 1

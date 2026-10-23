@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# Managed by aio. Install harness overwrites it.
+# The worktree a change is worked in, prepared the same way every time. Answers one JSON line,
+# {path, why}; exit 0 with the path, 1 with the reason.
+#
+#   .aio/steps/prepare <issue | branch> [base]      42 means change/42; base defaults to the trunk
+#
+# Run by hand, and by the app before every run (WorktreeEnvironment.PrepareAsync runs this file, or
+# the copy the app carries when the repository has none). Its worktree is <repository>/.worktrees/<branch with / as ->, beside the
+# checkout's own files and not inside any build.
+#
+# With an origin:
+# - A blank or HEAD base is the remote's default branch, asked with `ls-remote --symref` — not
+#   origin/HEAD, which is a clone-time cache. Whatever the base, it is fetched; a fetch that fails
+#   refuses, because a trunk nobody could refresh is the stale master this exists to stop.
+# - A branch already pushed is resumed from origin/<branch>, so a second machine continues the work
+#   instead of forking it.
+# - The worktree is then brought forward to what was pushed of its branch and merged up to the base.
+#   A merge and never a rebase: the branch is the claim and already pushed. Uncommitted files, a
+#   branch that diverged from what was pushed, or a conflict refuse, and a conflict is aborted so the
+#   worktree is left as it was. Nothing retries.
+# Without an origin, the worktree branches from the base it was given, or is returned as it is.
+set -uo pipefail
+export LC_ALL=C  # git's sentences are read here, and the C locale keeps them in English (#762)
+export GIT_TERMINAL_PROMPT=0
+
+say() { # say <path or empty> <why>
+  local path=null
+  [ -n "$1" ] && path="\"$1\""
+  printf '{"path": %s, "why": "%s"}\n' "$path" "$(printf '%s' "$2" | tr '\n"\\' "  '")"
+}
+refuse() { say "" "$1"; exit 1; }
+first() { printf '%s' "$1" | grep -v '^hint:' | head -1 | sed 's/^fatal: //; s/^error: //'; }
+
+branch="${1:-}"
+requested="${2:-}"
+[ -n "$branch" ] || refuse "prepare: no issue or branch given"
+[[ "$branch" =~ ^[0-9]+$ ]] && branch="change/$branch"
+[ "$requested" = HEAD ] && requested=""
+
+# The main checkout, even when this is run from inside a worktree.
+common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || refuse "$(pwd) is not a git repository."
+root=$(dirname "$common")
+cd "$root" || refuse "$root is no longer on disk."
+target="$root/.worktrees/${branch//\//-}"
+
+registered() { # is $target a worktree git lists?
+  local real listed
+  real=$(cd "$target" 2>/dev/null && pwd -P) || return 1
+  while read -r key listed; do
+    [ "$key" = worktree ] && [ "$(cd "$listed" 2>/dev/null && pwd -P)" = "$real" ] && return 0
+  done < <(git worktree list --porcelain)
+  return 1
+}
+exists() { git rev-parse -q --verify "$1^{commit}" >/dev/null; }
+fetch() { git fetch -q --no-tags origin "+refs/heads/$1:refs/remotes/origin/$1" 2>/dev/null; }
+contains() { git -C "$target" merge-base --is-ancestor "$1" HEAD 2>/dev/null; }
+unknown() { refuse "$target exists but git does not list it as a worktree of this repository. Remove the directory, or pick another branch name."; }
+
+if ! git remote get-url origin >/dev/null 2>&1; then
+  if [ -d "$target" ]; then registered || unknown; say "$target" "$branch is ready, as it was."; exit 0; fi
+  if ! said=$(git worktree add -q -b "$branch" "$target" "${requested:-HEAD}" 2>&1); then
+    case "$said" in
+      *"already exists"*) said=$(git worktree add -q "$target" "$branch" 2>&1) || refuse "$(first "$said")" ;;
+      *) refuse "$(first "$said")" ;;
+    esac
+  fi
+  say "$target" "$branch is ready, from ${requested:-HEAD}."
+  exit 0
+fi
+
+# The base, fetched.
+name="$requested"
+if [ -z "$name" ]; then
+  name=$(git ls-remote --symref origin HEAD 2>/dev/null | sed -n 's|^ref: refs/heads/\(.*\)[[:space:]]HEAD$|\1|p')
+  [ -n "$name" ] || refuse "The remote did not say which branch is its default, so there is no trunk to start from."
+fi
+name="${name#origin/}"
+if fetch "$name"; then
+  base="origin/$name"
+elif [ -n "$requested" ] && exists "$requested"; then
+  base="$requested"      # a tag or an oid named on purpose
+else
+  refuse "Could not fetch $name from origin, so the worktree cannot start from a fresh copy of it."
+fi
+
+pushed=false
+fetch "$branch" && pushed=true
+
+if [ -d "$target" ]; then
+  registered || unknown
+elif exists "refs/heads/$branch"; then
+  said=$(git worktree add -q "$target" "$branch" 2>&1) || refuse "$(first "$said")"
+else
+  from="$base"
+  $pushed && from="origin/$branch"
+  said=$(git worktree add -q -b "$branch" "$target" "$from" 2>&1) || refuse "$(first "$said")"
+fi
+
+dirty=$(git -C "$target" status --porcelain | wc -l | tr -d ' ')
+[ "$dirty" = 0 ] || refuse "$target has $dirty uncommitted files. Commit or discard them; a run does not start on top of them."
+
+if $pushed && ! contains "origin/$branch"; then
+  git -C "$target" merge -q --ff-only "origin/$branch" 2>/dev/null \
+    || refuse "$branch here and origin/$branch have both moved. Settle them by hand; a run does not pick a side."
+fi
+
+if ! contains "$base"; then
+  if ! said=$(git -C "$target" merge -q --no-edit "$base" 2>&1); then
+    files=$(git -C "$target" diff --name-only --diff-filter=U | paste -sd, - | sed 's/,/, /g')
+    git -C "$target" merge --abort 2>/dev/null
+    [ -n "$files" ] && refuse "$branch conflicts with $base in $files. Resolve it by hand; a run does not start on a conflict."
+    refuse "$(first "$said")"
+  fi
+fi
+
+say "$target" "$branch is ready, up to date with $base."

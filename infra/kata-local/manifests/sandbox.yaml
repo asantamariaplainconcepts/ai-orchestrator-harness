@@ -1,0 +1,30 @@
+# One agent-sandbox Sandbox in a Kata pod VM, with a workspace volume that outlives the pod: the
+# shape a worktree would take for one issue. aks-kata/tests/agent-sandbox/sandbox.yaml with k3s's
+# local-path storage instead of an Azure Disk, and kata-qemu instead of kata-vm-isolation.
+apiVersion: agents.x-k8s.io/v1beta1
+kind: Sandbox
+metadata:
+  name: probe-issue
+spec:
+  operatingMode: Running
+  shutdownPolicy: Retain
+  volumeClaimTemplates:
+    - metadata:
+        name: workspace
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests: { storage: 1Gi }
+  podTemplate:
+    spec:
+      runtimeClassName: kata-qemu
+      containers:
+        - name: agent
+          image: docker.io/library/alpine:3.22
+          command: ["sleep", "infinity"]
+          workingDir: /workspace
+          resources:
+            limits: { cpu: "1", memory: 512Mi }
+          volumeMounts:
+            - { name: workspace, mountPath: /workspace }

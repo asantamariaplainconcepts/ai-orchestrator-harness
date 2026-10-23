@@ -1,0 +1,83 @@
+#!/usr/bin/env node
+// Lists the folders Claude Code trusts that are no longer on disk, and with --remove takes their
+// entries out. Answers one JSON line, {file, trusted, gone, removed, paths, why}.
+//
+//   scripts/trust-sweep [--remove]
+//
+// The file is Claude Code's own: $CLAUDE_CONFIG_DIR/.claude.json, or ~/.claude.json. A trust entry is
+// projects[<folder>] with hasTrustDialogAccepted true. Before #608 every run wrote one for its
+// temporary worktree, and tests that launched a real claude wrote one for their scratch checkout: 51
+// such entries for folders long gone were counted on this machine on 11 October (#655).
+//
+// Without --remove nothing is written. With it, only the entries listed go, whole, and every other key
+// of the file stays as it was. The file is read and written back at once, through a rename so Claude
+// Code never reads half of it, with its mode kept; a Claude Code session writing the file in that same
+// instant can still lose its write, so run it with no session open.
+//
+// Not in the harness package: it tidies this machine's Claude Code configuration, not a repository.
+
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+const remove = process.argv.includes('--remove');
+const directory = process.env.CLAUDE_CONFIG_DIR || os.homedir();
+const file = path.join(directory, '.claude.json');
+
+const say = (answer, code = 0) => {
+  process.stdout.write(`${JSON.stringify({ file, ...answer })}\n`);
+  process.exit(code);
+};
+
+let text;
+try {
+  text = fs.readFileSync(file, 'utf8');
+} catch (error) {
+  if (error.code === 'ENOENT') say({ trusted: 0, gone: 0, removed: 0, paths: [], why: `${file} does not exist, so nothing is trusted.` });
+  say({ why: `${file} could not be read: ${error.message}` }, 1);
+}
+
+let root;
+try {
+  root = JSON.parse(text);
+} catch (error) {
+  say({ why: `${file} is not JSON, so nothing was swept: ${error.message}` }, 1);
+}
+
+const projects = root && typeof root.projects === 'object' && root.projects !== null ? root.projects : {};
+const trusted = Object.keys(projects).filter((folder) => projects[folder]?.hasTrustDialogAccepted === true);
+const gone = trusted.filter((folder) => !fs.existsSync(folder));
+
+if (!remove || gone.length === 0) {
+  say({
+    trusted: trusted.length,
+    gone: gone.length,
+    removed: 0,
+    paths: gone,
+    why:
+      gone.length === 0
+        ? `All ${trusted.length} trusted folders are on disk.`
+        : `${gone.length} of ${trusted.length} trusted folders are gone. --remove takes their entries out.`,
+  });
+}
+
+for (const folder of gone) delete projects[folder];
+
+// A dotfiles checkout links the file; the rename replaces what the link points to, not the link.
+const target = fs.realpathSync(file);
+const temporary = `${target}.trust-sweep-${process.pid}`;
+try {
+  fs.writeFileSync(temporary, `${JSON.stringify(root, null, 2)}\n`, { mode: fs.statSync(target).mode & 0o777 });
+  fs.renameSync(temporary, target);
+} catch (error) {
+  fs.rmSync(temporary, { force: true });
+  say({ trusted: trusted.length, gone: gone.length, removed: 0, paths: gone, why: `${file} could not be written: ${error.message}` }, 1);
+}
+
+say({
+  trusted: trusted.length,
+  gone: gone.length,
+  removed: gone.length,
+  paths: gone,
+  why: `Removed ${gone.length} trust entries for folders that are gone; ${trusted.length - gone.length} remain.`,
+});

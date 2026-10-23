@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Sdk Name="Aspire.AppHost.Sdk" Version="13.4.6" />
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>AiOrchestrator.AppHost</RootNamespace>
+    <IsAspireHost>true</IsAspireHost>
+    <UserSecretsId>aiorchestrator-apphost</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AiOrchestrator.MigrationService\AiOrchestrator.MigrationService.csproj" />
+    <ProjectReference Include="..\AiOrchestrator.Server\AiOrchestrator.Server.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.AppHost" />
+    <PackageReference Include="Aspire.Hosting.JavaScript" />
+    <PackageReference Include="CliWrap" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- GateTests runs the CI steps' own code against checkouts of its own. -->
+    <InternalsVisibleTo Include="AiOrchestrator.EndToEndTests" />
+  </ItemGroup>
+</Project>

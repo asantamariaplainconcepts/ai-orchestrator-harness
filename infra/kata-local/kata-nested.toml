@@ -1,0 +1,15 @@
+# kata-deploy's QEMU settings for arm64 assume a host at EL2. Inside a VM with nested
+# virtualization on Apple silicon, three of them stop a pod VM from booting. kata.sh copies this
+# file into the config.d of both QEMU runtimes (Go and runtime-rs), where it overrides the shipped
+# configuration without editing it. kata-nested-rs.toml adds one more for runtime-rs alone.
+[hypervisor.qemu]
+# "pmu=off": the nested vCPU has no PMU, so QEMU refuses the property and exits at once
+# ("Property 'host-arm-cpu.pmu' not found").
+cpu_features = ""
+# The AAVMF UEFI firmware never hands over to the kernel here: no console output in 40 s at 100 %
+# CPU. Booting the kernel directly takes under a second.
+firmware = ""
+# MSI through the emulated GIC ITS is not delivered to the pod VM, so every virtio device waits
+# forever, the agent's vsock included. Legacy INTx interrupts work. The rest is the shipped value.
+kernel_params = "cgroup_no_v1=all systemd.unified_cgroup_hierarchy=1 pci=nomsi"
+

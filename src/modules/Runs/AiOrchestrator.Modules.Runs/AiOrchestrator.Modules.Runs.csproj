@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>AiOrchestrator.Modules.Runs</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\shared\AiOrchestrator.BuildingBlocks\AiOrchestrator.BuildingBlocks.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ErrorOr" />
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="JsonSchema.Net" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <!-- Design-time only (#679): dotnet ef runs with this module as its own startup project, and
+         neither the Server nor the aio package carries it or the Roslyn it brings. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="XTerm.NET" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The end record's schema, read from the one file `aio done` is written against (#499). -->
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)..\..\..\..\.aio\schemas\done.v1.json" LogicalName="done.v1.json" Link="done.v1.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Tests drive the module's internals directly; its public surface stays empty by design. -->
+    <InternalsVisibleTo Include="AiOrchestrator.Modules.Runs.FunctionalTests" />
+  </ItemGroup>
+</Project>

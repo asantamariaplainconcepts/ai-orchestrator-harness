@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>AiOrchestrator.Infrastructure</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CliWrap" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" />
+    <PackageReference Include="Porta.Pty" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AiOrchestrator.BuildingBlocks\AiOrchestrator.BuildingBlocks.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="AiOrchestrator.InfrastructureTests" />
+  </ItemGroup>
+
+  <!-- The two scripts WorktreeEnvironment runs, carried so that a repository without the harness
+       still gets a worktree: an installed app has no checkout to copy them from. -->
+  <ItemGroup>
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)..\..\..\.aio\steps\prepare" LogicalName="harness.aio.prepare" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)..\..\..\.aio\steps\cleanup" LogicalName="harness.aio.cleanup" />
+  </ItemGroup>
+
+</Project>

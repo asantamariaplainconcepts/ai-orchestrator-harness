@@ -1,0 +1,73 @@
+// This repository's own configuration for the loop's steps. Each key is read by one step; the
+// README says what they hold.
+{
+  "evidence": {
+    "paths": ["src/frontend/**"],
+    "capture": {
+      "command": "(test -d src/frontend/node_modules || pnpm --dir src/frontend install --frozen-lockfile) && dotnet test src/tests/AiOrchestrator.EndToEndTests --filter FullyQualifiedName~ScreenCaptureTests",
+      "screens": "src/artifacts/design/screens"
+    }
+  },
+  "quality": {
+    "coverage": { "report": "src/artifacts/coverage/Cobertura.xml", "min": 70 },
+    "crap": { "report": "src/artifacts/coverage/crap.tsv", "max": 30 },
+    "mutation": { "report": "src/artifacts/mutation/summary.json" },
+    "duplication": { "paths": ["src"], "max": 0 },
+    "tests": { "max": 0 },
+    "touched": { "max": 0 },
+    "outside": { "max": 0 },
+    "old-tests": { "max": 0 }
+  },
+  // Paths a person always reviews, whatever the scores say. `*` crosses directories. diff-risk reads
+  // this list from the BASE commit, never from the change, so a change that edits the list is judged
+  // by the list it is editing (#732).
+  "protected": [
+    // The gate: the ci steps are declared here, and an agent does not approve an edit to its own gate.
+    "src/root/AiOrchestrator.AppHost/AppHost.cs",
+
+    // The agent's own instructions.
+    "AGENTS.md",
+    ".ai/*",
+    ".claude/*",
+    ".github/*",
+
+    // The policy: the loop, its scripts and checks, the commit hook and this list, what only a person
+    // or a workflow runs (release, pack, keep-committer, trust-sweep), and the package the app installs.
+    ".aio/*",
+    "scripts/*",
+    "src/modules/Workspace/AiOrchestrator.Modules.Workspace/Features/Harness/Package/*",
+    ".githooks/*",
+
+    // The irreversible: a migration, and the snapshot two branches both rewrite.
+    "src/modules/*/Persistence/Migrations/*",
+
+    // Every reach outside the process: the five ports and what Workspace asks of a checkout.
+    "src/shared/AiOrchestrator.BuildingBlocks/Ports/*",
+    "src/shared/AiOrchestrator.BuildingBlocks/Files/*",
+    "src/shared/AiOrchestrator.Infrastructure/Ports.cs",
+
+    // The contracts the browser and the server share, and the server's own.
+    "src/frontend/shared/http/contracts.ts",
+    "src/frontend/shared/http/openapi.json",
+    "src/root/AiOrchestrator.Server/Contracts/*",
+    "src/shared/AiOrchestrator.BuildingBlocks/CQS/Contracts.cs",
+
+    // Who may do what, and the secrets that prove it.
+    "src/shared/*/Identity/*",
+    "src/shared/*/Secrets/*",
+    "src/modules/Workspace/AiOrchestrator.Modules.Workspace/WorkspacePermissions.cs",
+    "src/modules/Runs/AiOrchestrator.Modules.Runs/Features/PbiRuns/PermissionModeSetting.cs",
+    "src/frontend/features/settings/PermissionsSection.tsx",
+    "src/tests/AiOrchestrator.ArchitectureTests/PermissionTests.cs",
+
+    // Dependencies: what the build restores, and the SDK it restores with.
+    "*.csproj",
+    "src/Directory.Build.props",
+    "src/Directory.Packages.props",
+    "src/global.json",
+    "src/frontend/package.json",
+    "src/frontend/pnpm-lock.yaml",
+    "infra/*/package.json",
+    "infra/*/package-lock.json"
+  ]
+}

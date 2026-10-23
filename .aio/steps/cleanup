@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# Managed by aio. Install harness overwrites it.
+# Undo what `prepare` and `claim` left on this machine: the worktree, the local branch and the claim
+# record. Answers one JSON line, {removed, branchDeleted, why}; exit 0 when everything asked for is
+# gone, 1 otherwise.
+#
+#   .aio/steps/cleanup <issue | branch | worktree path> [--force] [--worktree-only | --branch-only]
+#
+# Run by hand, and by the app when a run ends (WorktreeEnvironment.RetireAsync runs this file with
+# --worktree-only, or the copy the app carries). The app retires a worktree only when no other live
+# run works in it; that part is the app's, because only it knows what it has open.
+#
+# - The worktree is removed without --force unless asked: git refuses while it holds uncommitted
+#   work, and that refusal is the point.
+# - The branch is deleted with -D, because a squash leaves no merge base and -d refuses every time.
+#   So the safety is checked here instead: either every commit on the branch is on some remote ref,
+#   or GitHub says a pull request with exactly this head merged. Otherwise the commits exist only
+#   here, and deleting them is not cleanup.
+# - Already gone is gone: a worktree or branch that is not there counts as removed.
+set -uo pipefail
+export LC_ALL=C  # git's sentences are read here, and the C locale keeps them in English (#762)
+export GIT_TERMINAL_PROMPT=0 GH_PAGER=cat GH_PROMPT_DISABLED=1
+
+say() { printf '{"removed": %s, "branchDeleted": %s, "why": "%s"}\n' "$1" "$2" "$(printf '%s' "$3" | tr '\n"\\' "  '")"; }
+first() { printf '%s' "$1" | grep -v '^hint:' | head -1 | sed 's/^fatal: //; s/^error: //'; }
+
+what="${1:-}"; shift || true
+force=""; worktree=true; branchpart=true
+for flag in "$@"; do
+  case "$flag" in
+    --force) force=--force ;;
+    --worktree-only) branchpart=false ;;
+    --branch-only) worktree=false ;;
+    *) say false false "cleanup: unknown flag $flag"; exit 1 ;;
+  esac
+done
+[ -n "$what" ] || { say false false "cleanup: no issue, branch or path given"; exit 1; }
+
+common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || { say false false "$(pwd) is not a git repository."; exit 1; }
+root=$(dirname "$common")
+
+if [ -d "$what" ]; then
+  target=$(cd "$what" && pwd -P)
+  branch=$(git -C "$target" branch --show-current 2>/dev/null)
+else
+  branch="$what"
+  [[ "$branch" =~ ^[0-9]+$ ]] && branch="change/$branch"
+  target="$root/.worktrees/${branch//\//-}"
+fi
+cd "$root" || exit 1     # never stand inside what is about to go
+
+removed=true
+if $worktree && [ -d "$target" ]; then
+  if ! said=$(git worktree remove $force "$target" 2>&1); then
+    say false false "$(first "$said")"
+    exit 1
+  fi
+fi
+
+deleted=true
+why="Nothing of ${branch:-$target} is left on this machine."
+if $branchpart && [ -n "$branch" ] && git rev-parse -q --verify "refs/heads/$branch" >/dev/null; then
+  tip=$(git rev-parse "refs/heads/$branch")
+  only_here=$(git rev-list --count "refs/heads/$branch" --not --remotes 2>/dev/null || echo 1)
+  merged=""
+  if [ "$only_here" != 0 ]; then
+    merged=$(gh pr list --head "$branch" --state merged --json headRefOid --jq ".[] | select(.headRefOid == \"$tip\") | .headRefOid" 2>/dev/null)
+  fi
+  if [ "$only_here" = 0 ] || [ -n "$merged" ]; then
+    if said=$(git branch -D "$branch" 2>&1); then
+      [[ "$branch" =~ ^change/([0-9]+)$ ]] && git update-ref -d "refs/aio/claims/${BASH_REMATCH[1]}" 2>/dev/null
+    else
+      deleted=false; why=$(first "$said")
+    fi
+  else
+    deleted=false
+    why="$branch has $only_here commits that are on no remote and in no merged pull request. Push or merge them first; deleting them is not cleanup."
+  fi
+fi
+
+say "$removed" "$deleted" "$why"
+$deleted

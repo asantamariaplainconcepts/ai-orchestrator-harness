@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+# Managed by aio. Install harness overwrites it.
+# The declared loop's `risk` node: score an issue's change on localhost with laya, and answer
+# the typed JSON loop.yaml reads — {outcome, band, score, confidence, why}. The engine reads outcome
+# and why: `low` only when the band is low, `high` for medium and high, because a score that is not
+# sure asks a person, and `unknown` with only band and why when there is no score to give. band,
+# score and confidence are for a person reading the line.
+#
+# What is deterministic here is the routing on this answer, never the answer itself: the node's
+# own `x-harness: { decides: model }` says so, and this script keeps faith with it by making the
+# model's part small (one typed question set) and the weighting code (below, in this file, in
+# the open) rather than prompt material nobody reviews.
+#
+# The state is what the node has at this point in the loop: the issue body (gh), the OpenSpec
+# change directory, and the diffstat of origin/master...HEAD. Nothing is re-derived and nothing
+# is invented: a fact the checkout does not hold is a question that is not asked.
+#
+# A score it could not make is `unknown`, never a band: a missing server is not a risky change,
+# and a hold that said "high" would send the person reading it after the wrong thing (#596). The
+# script never installs anything and never retries: the engine runs `.aio/scorers/laya/laya ensure`
+# once a pass before a score. A crash is `unknown` too: the loop's node needs one JSON object on
+# stdout, not an exit code and a story.
+set -uo pipefail
+export LC_ALL=C  # git's sentences are read here, and the C locale keeps them in English (#762)
+
+issue="${1:-}"
+host=127.0.0.1; port=8317; url="http://$host:$port"
+
+fallback() { # fallback <why...> — the answer when there is no score to give
+  python3 -c 'import json,sys; print(json.dumps({"outcome": "unknown", "band": "unknown", "why": "risk-score: no se pudo puntuar: " + sys.argv[1]}, ensure_ascii=False))' "$*"
+  exit 0
+}
+
+[ -n "$issue" ] || fallback "no issue number given"
+
+work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
+
+# ── Prerequisites, each with its reason ──────────────────────────────────────────────────────
+
+curl -fsS -m 2 "$url/health" >/dev/null 2>&1 \
+  || fallback "no laya server on $url"
+
+command -v gh >/dev/null 2>&1 || fallback "gh is not on PATH, so the issue cannot be read"
+
+gh issue view "$issue" --json title,body >"$work/issue.json" 2>/dev/null \
+  || fallback "gh issue view $issue failed — no network, no auth, or no such issue"
+
+# ── The state: what this checkout holds at this node ─────────────────────────────────────────
+
+git diff --stat origin/master...HEAD >"$work/diffstat.txt" 2>/dev/null
+[ -s "$work/diffstat.txt" ] || echo "(no diff against origin/master yet)" >"$work/diffstat.txt"
+
+# One line per open (non-archived) change: the name and the first lines of its proposal's Why —
+# the part a risk is about.
+: >"$work/changes.txt"
+for d in openspec/changes/*/; do
+  case "$d" in *archive*) continue ;; esac
+  [ -r "$d/proposal.md" ] || continue
+  { printf '%s: ' "$(basename "$d")"
+    sed -n '/^## Why/,/^## [A-Z]/p' "$d/proposal.md" | sed '1d;$d' | head -20 | tr '\n' ' '
+    printf '\n'
+  } >>"$work/changes.txt"
+done
+
+python3 - "$work/issue.json" "$work/changes.txt" "$work/diffstat.txt" >"$work/state.json" <<'PY'
+import json, sys
+issue = json.load(open(sys.argv[1]))
+def slurp(path):
+    try: return open(path).read()
+    except OSError: return ""
+print(json.dumps({
+    "issue_title": issue.get("title", ""),
+    "issue_body": (issue.get("body") or "")[:6000],
+    "openspec_changes": slurp(sys.argv[2])[:6000],
+    "diffstat": slurp(sys.argv[3])[:3000],
+}))
+PY
+[ -s "$work/state.json" ] || fallback "the issue could not be turned into state"
+
+# ── The questions ────────────────────────────────────────────────────────────────────────────
+# noul only, plus the band choice. The `score` primitive is deliberately absent: measured on
+# this repository's own #365 it answered 1.29/3 blast radius for a change deleting 3,013 lines —
+# underestimating reach is its documented weak spot, and a risk gate that underestimates is
+# worse than none. Each noul is one atomic fact about the collision rules the repository states;
+# the band choice is asked once, over a rubric, and weighted with the facts below in code.
+
+cat >"$work/questions.json" <<'JSON'
+{
+  "shared_files": {"type":"noul","instructions":"Does this change edit a file or area that several people or features depend on at once — a file the repository itself calls shared, protected or a seam (Ports.cs, AppHost.cs, contracts, protected paths, the harness policy), or move code out of a file another change owns?"},
+  "migrations": {"type":"noul","instructions":"Does this change add, alter or remove a database migration, or change a module database schema or its tables?"},
+  "new_dependency": {"type":"noul","instructions":"Does this change introduce a new external dependency, framework or runtime, or a new way of reaching outside the process?"},
+  "deletes_or_rewrites": {"type":"noul","instructions":"Does this change delete or rewrite a substantial amount of existing code rather than add to it?"},
+  "band": {"type":"choice","instructions":"Which risk band does this change fall into, for a loop that routes high risk back to re-specification?",
+           "criteria":{"low":"contained, reversible, well-understood by the repository it lands in","medium":"crosses several files or behaviours, or adds something a person should read first","high":"architectural, destructive, or hard to reverse once merged"}}
+}
+JSON
+
+python3 - "$work/state.json" "$work/questions.json" >"$work/request.json" <<'PY'
+import json, sys
+state = json.load(open(sys.argv[1]))
+questions = json.load(open(sys.argv[2]))
+print(json.dumps({"state": state, "questions": questions}))
+PY
+
+curl -fsS -m 30 "$url/v1/systemone" -H 'content-type: application/json' \
+  --data @"$work/request.json" >"$work/response.json" 2>/dev/null \
+  || fallback "laya answered nothing on $url/v1/systemone (curl failed)"
+
+# ── The weighting: code, visible, reviewed ───────────────────────────────────────────────────
+# Every fired fact appears in `why` with its probability and confidence, so the person the hold
+# asks reads which numbers produced the band they are approving.
+
+python3 - "$work/response.json" >"$work/answer.json" <<'PY'
+import json, sys
+
+r = json.load(open(sys.argv[1]))
+a = r["answers"]
+
+def answer_confidence(name):
+    return float(a[name].get("answer_confidence", 0.0))
+
+facts = {}
+for f in ("shared_files", "migrations", "new_dependency", "deletes_or_rewrites"):
+    p = float(a[f].get("noul", 0.0))
+    facts[f] = {"yes": p >= 0.75 and answer_confidence(f) >= 0.5,
+                "p": round(p, 3), "conf": round(answer_confidence(f), 3)}
+
+band = a["band"]
+choice = band.get("choice")
+conf = float(band.get("answer_confidence", 0.0))
+order = {"low": 0, "medium": 1, "high": 2}
+if choice not in order:
+    print(json.dumps({"outcome": "unknown", "band": "unknown",
+                      "why": f"risk-score: no se pudo puntuar: laya named a band outside the rubric: {choice!r}"},
+                     ensure_ascii=False))
+    raise SystemExit
+level = order[choice]
+
+# Weights: what each fired fact costs, in code, argued here. A fact is cheap only when the band
+# already says it: the loads below move a band up, never down, because the loop's hold logic is
+# "when in doubt, a person reads it".
+weights = {"shared_files": 1.0, "migrations": 1.0, "new_dependency": 0.5, "deletes_or_rewrites": 0.5}
+fired = [f for f, v in facts.items() if v["yes"]]
+fact_load = sum(weights[f] for f in fired)
+
+score = min(1.0, max(0.0, (level / 2) * 0.6 + fact_load * 0.15))
+
+if choice == "low" and fact_load >= 1.5:
+    band_out = "medium"
+elif choice == "medium" and fact_load >= 2.5:
+    band_out = "high"
+else:
+    band_out = choice
+
+routing = r.get("routing", {}).get("model", "?")
+detail = "; ".join(f"{f}={facts[f]['p']}@{facts[f]['conf']}" for f in fired) or "no collision fact fired"
+print(json.dumps({
+    "outcome": "low" if band_out == "low" else "high",
+    "band": band_out,
+    "score": round(score, 3),
+    "confidence": round(conf, 3),
+    "why": f"band {choice}@{round(conf,3)} (routed {routing}); fired: {detail}",
+}))
+PY
+
+[ -s "$work/answer.json" ] || fallback "weighting produced nothing — the response was not laya's typed contract"
+cat "$work/answer.json"
+exit 0

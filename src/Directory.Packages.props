@@ -1,0 +1,98 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+    <CentralPackageVersionOverrideEnabled>false</CentralPackageVersionOverrideEnabled>
+  </PropertyGroup>
+  <!-- Repo-wide analyzers, applied to every project via GlobalPackageReference. -->
+  <ItemGroup>
+    <GlobalPackageReference Include="Roslynator.Analyzers" Version="4.15.0" />
+    <!-- The pseudo-terminal. .NET has no built-in one: it is an open proposal for .NET 12
+         (dotnet/runtime#128565). See docs/adr/0001. -->
+    <PackageVersion Include="Porta.Pty" Version="1.0.7" />
+    <!-- Every spawn that is not a terminal: both streams drained, a deadline, the tree killed on
+         cancel — the plumbing each call site used to hand-roll and get subtly different. -->
+    <PackageVersion Include="CliWrap" Version="3.10.5" />
+    <!-- The headless VT emulator behind the reattach frame (#397): a .NET port of xterm.js with
+         the full command set — DECSTBM, IL/DL, ECH, tab stops, wide glyphs — where ScreenFrame
+         hand-modelled a subset. -->
+    <PackageVersion Include="XTerm.NET" Version="2.0.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- App packages -->
+    <!-- A pin, not a reference: MessagePack comes in through Aspire.Hosting's StreamJsonRpc, and
+         2.5.302 has GHSA-qhrr-8q5h-9q3h (nested arrays past buffer limits), which NuGetAudit turns
+         into a restore error. Transitive pinning lifts it to the patched 2.5.303 until Aspire's own
+         dependency moves past it; then this line can go. -->
+    <PackageVersion Include="MessagePack" Version="2.5.303" />
+    <PackageVersion Include="ErrorOr" Version="2.1.1" />
+    <PackageVersion Include="FluentValidation" Version="12.1.1" />
+    <PackageVersion Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
+    <PackageVersion Include="Scrutor" Version="7.0.0" />
+    <!-- The loop file's parser (#365): a comment- and order-preserving YAML reader behind
+         IDeclaredLoopFile.Read, on the same reading terms as every other declared file. -->
+    <PackageVersion Include="YamlDotNet" Version="16.3.0" />
+    <!-- A node's output_format is a JSON Schema (#365); the loop validates against the real
+         spec rather than a hand-kept subset of it. -->
+    <PackageVersion Include="JsonSchema.Net" Version="9.4.0" />
+    <!-- Azure DevOps bodies and comments are HTML; a real parser reads them rather than a
+         hand-kept tag stripper. -->
+    <PackageVersion Include="AngleSharp" Version="1.8.3" />
+    <!-- #669. The PBI port's few-second read cache: expiry, eviction, one vendor call for callers
+         asking at once, and tags to forget a repository on a write. The same line as Http.Resilience. -->
+    <PackageVersion Include="Microsoft.Extensions.Caching.Hybrid" Version="10.7.0" />
+    <!-- Data -->
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />
+    <!-- The EF Sqlite provider pulls lib.e_sqlite3 2.1.11, which carries GHSA-2m69-gcr7-jv3q and
+         fails the warnings-as-errors restore as NU1903. Pinned until the provider moves. -->
+    <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.12" />
+    <PackageVersion
+      Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore"
+      Version="10.0.9"
+    />
+    <!-- API / observability -->
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.AspNetCore.SpaServices.Extensions" Version="10.0.9" />
+    <!-- #508. Writes the Server's OpenAPI document at build time; the frontend generates the v2
+         contract from it. -->
+    <PackageVersion Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.9" />
+    <!-- Transitive floor from Microsoft.AspNetCore.OpenApi 10.0.9 is 2.0.0, which has a known
+         high-severity vulnerability (GHSA-v5pm-xwqc-g5wc, stack overflow on circular schema refs).
+         Pinned to the latest patched 2.x release to stay off the affected API surface. -->
+    <PackageVersion Include="Microsoft.OpenApi" Version="2.9.0" />
+    <PackageVersion Include="Scalar.AspNetCore" Version="2.16.7" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.16.0" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.16.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.16.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.16.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.15.1" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.7.0" />
+    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.7.0" />
+    <!-- Aspire dev orchestration -->
+    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.4.6" />
+    <PackageVersion Include="Aspire.Hosting.JavaScript" Version="13.4.6" />
+    <!-- Test packages -->
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
+    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
+    <PackageVersion Include="Shouldly" Version="4.3.0" />
+    <!-- A clock a test moves by hand, for the engine's schedule (#562); the same line as Http.Resilience. -->
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.7.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.9" />
+    <PackageVersion Include="NetArchTest.Rules" Version="1.3.2" />
+    <!-- End-to-end testing: boots the AppHost in-process and drives a real browser. Aspire.Hosting.Testing
+         tracks the AppHost's Aspire version line (13.4.6); Playwright ships the browser + driver. -->
+    <PackageVersion Include="Aspire.Hosting.Testing" Version="13.4.6" />
+    <PackageVersion Include="Microsoft.Playwright" Version="1.58.0" />
+    <!-- Roslyn analyzer authoring. Microsoft.CodeAnalysis.CSharp is pinned to 5.0.0, matching the
+         Roslyn compiler bundled with the .NET 10 SDK (a newer package version fails to load: CS9057).
+         Microsoft.CodeAnalysis.Analyzers (analyzer-authoring best-practice rules) has no such
+         constraint and stays on latest. -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.3.0" />
+  </ItemGroup>
+</Project>

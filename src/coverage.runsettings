@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What `aspire do ci` collects coverage with (CISteps/TestStep.cs). Generated sources and
+     migrations are filtered where the report is merged (CISteps/CoverageStep.cs), not here:
+     coverlet's ExcludeByFile does not match source-generator paths, and ExcludeByAttribute with
+     GeneratedCode empties the whole report. -->
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat Code Coverage">
+        <Configuration>
+          <Format>cobertura</Format>
+          <ExcludeByAttribute>ExcludeFromCodeCoverage</ExcludeByAttribute>
+          <SkipAutoProps>true</SkipAutoProps>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

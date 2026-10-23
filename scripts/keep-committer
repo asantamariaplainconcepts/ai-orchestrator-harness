@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Gives the commit a rebase just replayed the committer it had before, and answers {kept, why}. Exit 0
+# unless no rebase is in progress or git could not amend, because a failing --exec stops the rebase.
+#
+#   git rebase -x scripts/keep-committer <upstream>
+#
+# #741. The committer is the loop's mark on a commit: `aio run <id>` or `aio script <name>`, and a
+# person's commit has none. git writes the rebasing session's committer on every commit it replays,
+# and in the loop that session is the `rebasing` run, whose committer is `aio run <its id>`: without
+# this, a person's commit would read as that run's after a rebase. The author, the message and the
+# tree are left as the rebase made them; only the committer's name and address go back.
+set -uo pipefail
+
+say() { printf '{"kept": %s, "why": "%s"}\n' "$1" "$(printf '%s' "$2" | tr '\n"\\' "  '")"; }
+
+done_file=$(git rev-parse --git-path rebase-merge/done 2>/dev/null)
+[ -f "$done_file" ] || { say false "keep-committer: no rebase is in progress here"; exit 1; }
+
+# The last commit the rebase picked; with --exec its line comes right before this one.
+original=$(grep -E '^(pick|p|reword|r|edit|e|fixup|f|squash|s) ' "$done_file" | tail -n 1 \
+  | awk '{ for (i = 2; i <= NF; i++) if ($i ~ /^[0-9a-f]+$/ && length($i) >= 7) { print $i; exit } }')
+[ -n "$original" ] || { say false "keep-committer: the rebase has picked no commit yet"; exit 1; }
+
+# A pick that came out empty and was dropped leaves HEAD on the commit before: that one is not this.
+same='%an%x1f%ae%x1f%at%x1f%s'
+if [ "$(git log -1 --format="$same" "$original")" != "$(git log -1 --format="$same" HEAD)" ]; then
+  say false "keep-committer: HEAD is not the replay of $original, which came out empty, so its committer is left alone"
+  exit 0
+fi
+
+name=$(git log -1 --format=%cn "$original")
+email=$(git log -1 --format=%ce "$original")
+if [ "$(git log -1 --format='%cn <%ce>' HEAD)" = "$name <$email>" ]; then
+  say true "$(git rev-parse --short HEAD) already has $name as its committer."
+  exit 0
+fi
+
+GIT_COMMITTER_NAME="$name" GIT_COMMITTER_EMAIL="$email" git commit --quiet --amend --no-edit --allow-empty \
+  || { say false "keep-committer: git could not amend the replay of $original"; exit 1; }
+say true "$(git rev-parse --short HEAD) has $name back as its committer."

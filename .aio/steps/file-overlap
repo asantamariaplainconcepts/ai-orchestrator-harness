@@ -1,0 +1,127 @@
+#!/usr/bin/env node
+// Managed by aio. Install harness overwrites it.
+// The loop's `overlap` node: may this issue start without fighting an issue already in flight over a
+// file? Answers one JSON line, {wait, clear, hold, why}. Clear exits 0 and the step passes; a wait
+// exits 0 with `wait: true`; a hold exits 1, so the engine holds the PBI with the why. The loop reads
+// wait, why and the exit code; clear and hold are for a person reading the line.
+//
+//   .aio/steps/file-overlap <issue>
+//
+// In flight is what is claimed and still open: every change/<n> branch at origin (ADR-0005) whose
+// number is an open issue, not a pull request. The branch alone is not enough — a pull request merged
+// from the web leaves its branch behind, and on 2026-10-03 twelve of this repository's seventeen
+// change/<n> branches belonged to closed issues, each of which would have kept any issue sharing its
+// files waiting forever.
+//
+// Each issue's file-set is what it declares in its Where it lands section, as lib/where-it-lands.js
+// reads it for quality too (#758). Two paths overlap when one ends with the other on a `/` boundary
+// (issues write the same file from different roots), or when one is a directory the other sits
+// under, compared without case.
+//
+// Unknown is never clear, and the answer says who can fix it. This issue declaring no path is `hold`:
+// only a person or a refine can add one, so the engine holds it where somebody sees it (#576). Anything
+// that passes on its own — another issue in flight on the same files, or one that declares nothing, or
+// gh failing to read — is a wait, and the next tick asks again.
+
+const { execFileSync } = require('node:child_process');
+process.env.LC_ALL = 'C'; // git's sentences in English whatever the machine's language (#762)
+const { readFileSync } = require('node:fs');
+const { join } = require('node:path');
+const { WHERE, declared } = require('../lib/where-it-lands.js');
+
+const say = (clear, why, hold = false) => {
+  const wait = !clear && !hold;
+  process.stdout.write(`${JSON.stringify({ ...(wait ? { wait } : {}), clear, hold, why })}\n`);
+  process.exit(hold ? 1 : 0);
+};
+
+const run = (command, args) =>
+  execFileSync(command, args, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, GH_PAGER: 'cat', GH_PROMPT_DISABLED: '1', GIT_TERMINAL_PROMPT: '0' },
+  });
+
+const firstLine = (error) => String(error.stderr || error.message).trim().split('\n')[0];
+
+// What the messages call the section: the title the repository's installed issue template gives it
+// (#655), so an issue written in Spanish is told to look for Dónde cae and not for Where it lands. A
+// repository without the template, or whose template has no such heading, gets both names.
+function whereTitle() {
+  let top = '.';
+  try {
+    top = run('git', ['rev-parse', '--show-toplevel']).trim();
+  } catch {
+    // Outside a checkout the template is looked for where the script runs.
+  }
+  try {
+    const template = readFileSync(join(top, '.aio', 'templates', 'issue.md'), 'utf8').split(/\r?\n/);
+    const heading = template.map((line) => line.match(/^#{1,6}\s*(.+?)\s*$/)?.[1]).find((t) => t && WHERE.test(t));
+    if (heading) return heading;
+  } catch {
+    // No template: the fallback below.
+  }
+  return 'Dónde cae / Where it lands';
+}
+
+// Case-folded: issues write the same folder as `Modules/Workspace` and `src/modules/Workspace`.
+const strip = (path) => path.replace(/^\.\//, '').toLowerCase();
+const isDirectory = (path) => path.endsWith('/') || !/\.[A-Za-z0-9]{1,5}$/.test(path.split('/').pop() ?? '');
+
+/** Whether two declared paths can name the same file. */
+function overlaps(a, b) {
+  const [x, y] = [strip(a).replace(/\/$/, ''), strip(b).replace(/\/$/, '')];
+  if (x === y || x.endsWith(`/${y}`) || y.endsWith(`/${x}`)) return true;
+  const under = (dir, path) => path.startsWith(`${dir}/`) || path.includes(`/${dir}/`);
+  return (isDirectory(a) && under(x, y)) || (isDirectory(b) && under(y, x));
+}
+
+function main() {
+  const issue = process.argv[2];
+  if (!/^\d+$/.test(issue ?? '')) say(false, 'file-overlap: no issue number given');
+
+  const body = (n) => run('gh', ['issue', 'view', n, '--json', 'body', '--jq', '.body']);
+  const where = whereTitle();
+
+  let mine;
+  try {
+    mine = declared(body(issue));
+  } catch (error) {
+    say(false, `#${issue} could not be read: ${firstLine(error)}`);
+  }
+  if (!mine) say(false, `#${issue} has no ${where} section, so its files cannot be compared. /aio:refine adds one.`, true);
+  if (mine.length === 0) say(false, `#${issue}'s ${where} names no path, so its files cannot be compared. /aio:refine adds them.`, true);
+
+  let claimed;
+  try {
+    claimed = run('git', ['ls-remote', 'origin', 'refs/heads/change/*'])
+      .split('\n')
+      .map((line) => line.match(/refs\/heads\/change\/(\d+)$/)?.[1])
+      .filter((n) => n && n !== issue);
+  } catch (error) {
+    say(false, `The claims at origin could not be listed: ${firstLine(error)}`);
+  }
+
+  const inFlight = [];
+  for (const other of claimed) {
+    let theirs;
+    try {
+      const read = JSON.parse(run('gh', ['issue', 'view', other, '--json', 'state,body,url']));
+      // gh answers a pull request's number too: change/457 is an open design prototype, not a PBI.
+      if (read.state !== 'OPEN' || /\/pull\/\d+$/.test(read.url ?? '')) continue;
+      theirs = declared(read.body ?? '');
+    } catch (error) {
+      say(false, `#${other} is claimed and could not be read: ${firstLine(error)}`);
+    }
+    inFlight.push(other);
+    if (!theirs) say(false, `#${other} is in flight with no ${where} section, so it could touch anything.`);
+    if (theirs.length === 0) say(false, `#${other} is in flight and its ${where} names no path, so it could touch anything.`);
+
+    const shared = mine.filter((path) => theirs.some((their) => overlaps(path, their)));
+    if (shared.length > 0) say(false, `#${other} is in flight and declares ${shared.join(', ')} too.`);
+  }
+
+  say(true, inFlight.length === 0 ? 'Nothing else is in flight.' : `No file shared with ${inFlight.map((n) => `#${n}`).join(', ')}.`);
+}
+
+main();

@@ -1,0 +1,564 @@
+#!/usr/bin/env node
+// Managed by aio. Install harness overwrites it.
+// The agent's one channel to the control plane: how a run ends, and how it reads and writes the
+// issues it works on and their pull requests. Each command answers one JSON line and an exit code.
+//
+//   .aio/aio done <outcome> [--reason <text>] [--problems <text>]...
+//   .aio/aio issue <view|list|create|edit|comment|children|move> …
+//   .aio/aio pr <view|diff|review> <issue> …
+//
+// ## aio done
+//
+// The agent says its outcome, and the control plane reads it instead of guessing from the
+// transcript. Answers {written, why}; exit 0 when the record is written, 1 when the file could not
+// be written, 2 when the arguments are refused and nothing is written.
+//
+//   outcome     what the state's `on` maps: approved, rejected, ready, gaps, … — lower case,
+//               digits and dashes. `blocked` is reserved: the run fails, and --reason says why.
+//   --reason    why, in the agent's words. Required with `blocked`.
+//   --problems  one problem found and not fixed; repeat it for each one.
+//
+// The record goes to .aio/done.json at the top of the checkout the agent is working in — the
+// run's worktree, which is the agent's working directory because that is where the launcher starts
+// it. The top is asked of git so a `cd` into a subdirectory still lands in the same place; outside a
+// repository it is the current directory. The file is overwritten each time: the last call is the
+// one that counts, and a record older than its run is ignored by the reader.
+//
+// AIO_DONE_FILE, when set, is the file instead. The launcher sets it to a path outside the worktree,
+// beside the run's recording, so retiring the worktree after the run does not take the record with it.
+//
+// The shape is .aio/schemas/done.v1.json. The checks below are that schema's, so a refusal is a
+// sentence here rather than an invalid file the run fails on later; a test in Modules.Runs fails if
+// the two drift apart. The reader still treats the file as untrusted, because an agent can write it
+// by hand.
+//
+// ## aio issue (#634)
+//
+// The issues of the run's repository, through the control plane and the folder's vendor adapter
+// rather than a vendor's CLI, so the commands read the same on GitHub as on any other vendor.
+//
+//   aio issue view <n> [--markdown]        the issue: title, body, state, hold, parent, children and
+//                                          comments. --markdown prints it as the Issue tab shows it,
+//                                          body then comments, as text instead of the JSON line.
+//   aio issue list --search <text> [--state open|closed|all]     open unless --state says
+//   aio issue create --title <t> --body-file <f> [--parent <n>]  with no state; filed under <n>
+//   aio issue edit <n> --body-file <f>     replaces the body
+//   aio issue comment <n> --body-file <f>  adds a comment
+//   aio issue children <n>                 the issues filed under <n>, each with its state
+//   aio issue move <n> <state>             what a person's "Move to…" does, journal line and all
+//
+// Answers {issue | issues | comment, why}: null and the reason on a failure. Exit 0 when the control
+// plane answered, 1 when it refused or could not be reached, 2 when the arguments are refused and
+// nothing was sent.
+//
+// AIO_API is the control plane's address and AIO_REPOSITORY the repository, such as owner/name; the
+// launcher puts both in every run's environment, and inside an sbx sandbox the address names the
+// host as host.docker.internal. --repo <owner/name> overrides the repository.
+//
+// --body-file takes a literal path, or - for standard input. A shell variable in the command would
+// stop an unattended run at a permission prompt (#644). A body file inside the checkout's .aio/
+// folder is removed once the control plane has it: an untracked file left in a worktree stops
+// `cleanup` from removing it, and the commands write their bodies there.
+//
+// ## aio pr (#651)
+//
+// The pull request that closes an issue, named by the issue, through the same control plane and
+// adapter, with the same environment, exit codes and body files as aio issue.
+//
+//   aio pr view <issue> [--markdown]   the pull request: title, state, branches, checks, body, every
+//                                      comment and review, and every comment anchored to a line with
+//                                      its file and line. --markdown prints it as text, each line
+//                                      comment under its file:line, which `gh pr view --comments`
+//                                      does not show: on PR #457 it showed 0 of 2.
+//   aio pr diff <issue>                the unified diff, as text
+//   aio pr review <issue> --verdict comment|approve|request-changes --body-file <f>
+//                                      a review on the head. An approval or a request for changes
+//                                      the vendor refuses from the pull request's author is kept as
+//                                      a comment, and `why` says so (#544): until the loop has an
+//                                      account of its own (#550) it opens its pull requests as the
+//                                      person, so its reviewer is their author.
+//
+// Answers {pr | diff | review, why}; a pull request not opened yet is null with exit 0, as absence
+// is not a failure.
+
+const { execFileSync } = require('node:child_process');
+process.env.LC_ALL = 'C'; // git's sentences in English whatever the machine's language (#762)
+const fs = require('node:fs');
+const path = require('node:path');
+
+const [command, ...rest] = process.argv.slice(2);
+if (command === 'done') done(rest);
+else if (command === 'issue') issue(rest);
+else if (command === 'pr') pr(rest);
+else {
+  process.stdout.write(
+    `${JSON.stringify({ written: null, why: `aio: unknown command '${command ?? ''}'; the commands are: aio done <outcome>, aio issue <subcommand>, aio pr <subcommand>` })}\n`,
+  );
+  process.exit(2);
+}
+
+function top() {
+  try {
+    return execFileSync('git', ['rev-parse', '--show-toplevel'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    return process.cwd();
+  }
+}
+
+function done(rest) {
+  const MAX_TEXT = 4000;
+  const MAX_PROBLEMS = 100;
+
+  const say = (written, why, code) => {
+    process.stdout.write(`${JSON.stringify({ written, why })}\n`);
+    process.exit(code);
+  };
+  const refuse = (why) => say(null, `aio: ${why}`, 2);
+
+  let outcome = null;
+  let reason = null;
+  const problems = [];
+
+  for (let i = 0; i < rest.length; i++) {
+    const argument = rest[i];
+    if (argument === '--reason' || argument === '--problems') {
+      const value = rest[++i];
+      if (value === undefined || value.trim() === '') refuse(`${argument} needs a text after it`);
+      if (value.length > MAX_TEXT) refuse(`${argument} is ${value.length} characters; the limit is ${MAX_TEXT}`);
+      if (argument === '--reason') reason = value;
+      else problems.push(value);
+    } else if (argument.startsWith('--')) {
+      refuse(`unknown flag ${argument}`);
+    } else if (outcome === null) {
+      outcome = argument;
+    } else {
+      refuse(`one outcome only; '${outcome}' and '${argument}' were both given`);
+    }
+  }
+
+  if (outcome === null) refuse('no outcome given: aio done <outcome> [--reason <text>] [--problems <text>]');
+  if (!/^[a-z][a-z0-9-]*$/.test(outcome) || outcome.length > 64) {
+    refuse(`'${outcome}' is not an outcome: lower case letters, digits and dashes, starting with a letter`);
+  }
+  if (outcome === 'blocked' && reason === null) refuse('blocked needs --reason, which is what the person reads');
+  if (problems.length > MAX_PROBLEMS) refuse(`${problems.length} problems; the limit is ${MAX_PROBLEMS}`);
+
+  const file = process.env.AIO_DONE_FILE
+    ? path.resolve(process.env.AIO_DONE_FILE)
+    : path.join(top(), '.aio', 'done.json');
+
+  const record = { version: 1, outcome };
+  if (reason !== null) record.reason = reason;
+  if (problems.length > 0) record.problems = problems;
+  record.at = new Date().toISOString();
+
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    // Written beside and renamed over, so a reader never sees half a record.
+    const partial = `${file}.${process.pid}.tmp`;
+    fs.writeFileSync(partial, `${JSON.stringify(record)}\n`);
+    fs.renameSync(partial, file);
+  } catch (error) {
+    say(null, `aio: could not write ${file}: ${error.message}`, 1);
+  }
+
+  say(file, `The run ends with '${outcome}'.`, 0);
+}
+
+async function issue(rest) {
+  const [subcommand, ...args] = rest;
+  const key = { list: 'issues', children: 'issues', comment: 'comment' }[subcommand] ?? 'issue';
+  const say = (value, why, code) => {
+    process.stdout.write(`${JSON.stringify({ [key]: value, why })}\n`);
+    process.exit(code);
+  };
+  const refuse = (why) => say(null, `aio: ${why}`, 2);
+  const usage = {
+    view: 'aio issue view <n> [--markdown]',
+    list: 'aio issue list --search <text> [--state open|closed|all]',
+    create: 'aio issue create --title <title> --body-file <file> [--parent <n>]',
+    edit: 'aio issue edit <n> --body-file <file>',
+    comment: 'aio issue comment <n> --body-file <file>',
+    children: 'aio issue children <n>',
+    move: 'aio issue move <n> <state>',
+  };
+  if (!(subcommand in usage)) {
+    refuse(`unknown subcommand '${subcommand ?? ''}'; the subcommands are: ${Object.keys(usage).join(', ')}`);
+  }
+
+  const { flags, words } = parse(args, ['--search', '--state', '--title', '--body-file', '--parent', '--repo'], usage[subcommand], refuse);
+  const wanted = subcommand === 'list' || subcommand === 'create' ? 0 : subcommand === 'move' ? 2 : 1;
+  if (words.length !== wanted) refuse(`${usage[subcommand]}`);
+  const [id, state] = words;
+  if (id !== undefined && !/^[A-Za-z0-9-]+$/.test(id)) refuse(`'${id}' is not an issue number or key`);
+
+  const { repository, bodyFile, forget, call } = connect(flags, usage[subcommand], say, refuse);
+
+  const brief = (pbi) => ({
+    repository: pbi.repository,
+    id: pbi.id,
+    title: pbi.title,
+    state: pbi.state ?? null,
+    held: Boolean(pbi.held),
+    closed: Boolean(pbi.closed),
+  });
+  const named = `${repository}#${id}`;
+
+  switch (subcommand) {
+    case 'view': {
+      const [detail, page, children] = await Promise.all([
+        call('GET', '/api/pbi', { repository, id }),
+        call('GET', '/api/pbi/issue', { repository, id }),
+        call('GET', '/api/pbi/children', { repository, id }),
+      ]);
+      const read = {
+        ...brief(detail.pbi),
+        url: page.url,
+        author: page.author ?? null,
+        body: page.body,
+        parent: page.parent ? { repository: page.parent.repository, id: page.parent.id, title: page.parent.title } : null,
+        children: children.map(brief),
+        comments: page.comments.map((comment) => ({
+          author: comment.author ?? null,
+          createdAt: comment.createdAt,
+          body: comment.body,
+        })),
+      };
+      if (flags.markdown) {
+        process.stdout.write(markdown(read));
+        process.exit(0);
+      }
+      say(read, `${named} is ${read.closed ? 'closed' : read.state ?? 'in no state'}${read.held ? ', held' : ''}, with ${read.comments.length} comments.`, 0);
+      break;
+    }
+    case 'list': {
+      if (flags.search === undefined) refuse(`--search is required: ${usage.list}`);
+      const scope = flags.state ?? 'open';
+      if (!['open', 'closed', 'all'].includes(scope)) refuse(`--state is open, closed or all, not '${scope}'`);
+      const found = await call('GET', '/api/pbi/search', { repository, text: flags.search, state: scope });
+      say(found.map(brief), `${found.length} ${scope === 'all' ? '' : `${scope} `}issues of ${repository} match '${flags.search}'.`, 0);
+      break;
+    }
+    case 'create': {
+      if (flags.title === undefined) refuse(`--title is required: ${usage.create}`);
+      if (flags.parent !== undefined && !/^[A-Za-z0-9-]+$/.test(flags.parent)) refuse(`'${flags.parent}' is not an issue number or key`);
+      const { text, file } = bodyFile();
+      const created = await call('POST', '/api/pbi/create', { }, { repository, title: flags.title, body: text, parent: flags.parent ?? null });
+      forget(file);
+      say(
+        { ...brief(created), parent: flags.parent ?? null },
+        `${created.repository}#${created.id} is created${flags.parent ? `, under #${flags.parent}` : ''}, with no state.`,
+        0,
+      );
+      break;
+    }
+    case 'edit': {
+      const { text, file } = bodyFile();
+      const edited = await call('POST', '/api/pbi/edit', {}, { repository, id, body: text });
+      forget(file);
+      say({ repository: edited.repository, id: edited.id }, `The body of ${named} is replaced: ${edited.body.length} characters.`, 0);
+      break;
+    }
+    case 'comment': {
+      const { text, file } = bodyFile();
+      const comment = await call('POST', '/api/pbi/issue/comment', {}, { repository, id, body: text, attachments: null });
+      forget(file);
+      say({ id: comment.id, url: comment.url ?? null }, `The comment is on ${named}.`, 0);
+      break;
+    }
+    case 'children': {
+      const children = await call('GET', '/api/pbi/children', { repository, id });
+      say(children.map(brief), `${named} has ${children.length} children, ${children.filter((child) => child.closed).length} of them closed.`, 0);
+      break;
+    }
+    case 'move': {
+      const line = await call('POST', '/api/pbi/move', {}, { repository, id, to: state });
+      say({ repository, id, state: line.to ?? state }, line.why, 0);
+      break;
+    }
+  }
+}
+
+async function pr(rest) {
+  const [subcommand, ...args] = rest;
+  const key = { diff: 'diff', review: 'review' }[subcommand] ?? 'pr';
+  const say = (value, why, code) => {
+    process.stdout.write(`${JSON.stringify({ [key]: value, why })}\n`);
+    process.exit(code);
+  };
+  const refuse = (why) => say(null, `aio: ${why}`, 2);
+  const usage = {
+    view: 'aio pr view <issue> [--markdown]',
+    diff: 'aio pr diff <issue>',
+    review: 'aio pr review <issue> --verdict comment|approve|request-changes --body-file <file>',
+  };
+  if (!(subcommand in usage)) {
+    refuse(`unknown subcommand '${subcommand ?? ''}'; the subcommands are: ${Object.keys(usage).join(', ')}`);
+  }
+
+  const { flags, words } = parse(args, ['--verdict', '--body-file', '--repo'], usage[subcommand], refuse);
+  if (words.length !== 1) refuse(usage[subcommand]);
+  const [id] = words;
+  if (!/^[A-Za-z0-9-]+$/.test(id)) refuse(`'${id}' is not an issue number or key: a pull request is named by the issue it closes`);
+  if (subcommand === 'review' && !['comment', 'approve', 'request-changes'].includes(flags.verdict)) {
+    refuse(`--verdict is comment, approve or request-changes${flags.verdict === undefined ? '' : `, not '${flags.verdict}'`}: ${usage.review}`);
+  }
+
+  const { repository, bodyFile, forget, call } = connect(flags, usage[subcommand], say, refuse);
+  const named = `${repository}#${id}`;
+  const none = () => say(null, `${named} has no pull request yet.`, 0);
+
+  switch (subcommand) {
+    case 'view': {
+      const [review, conversation] = await Promise.all([
+        call('GET', '/api/pbi/review', { repository, id }),
+        call('GET', '/api/pbi/review/conversation', { repository, id }),
+      ]);
+      if (review.pullRequest === null || conversation.pullRequest === null) none();
+      const pull = review.pullRequest;
+      const change = review.change;
+      const read = {
+        repository,
+        issue: id,
+        number: pull.id,
+        url: pull.url,
+        title: conversation.title,
+        state: conversation.state,
+        draft: pull.isDraft,
+        approved: pull.isApproved,
+        author: conversation.author ?? null,
+        head: change.headRef,
+        headSha: change.headSha,
+        base: change.baseRef,
+        commits: change.commits,
+        additions: change.additions,
+        deletions: change.deletions,
+        changedFiles: change.changedFiles,
+        body: conversation.body,
+        checks: review.checks.rows,
+        checksProblem: review.checks.problem ?? null,
+        comments: conversation.comments.map((comment) => ({ author: comment.author ?? null, at: comment.at, body: comment.body })),
+        reviews: conversation.reviews.map((note) => ({ author: note.author ?? null, verdict: note.verdict ?? null, at: note.at, body: note.body })),
+        threads: review.threads.map((thread) => ({
+          path: thread.path,
+          line: thread.line ?? null,
+          resolved: thread.isResolved,
+          outdated: thread.isOutdated,
+          comments: thread.comments.map((comment) => ({ author: comment.author ?? null, at: comment.at, body: comment.body })),
+        })),
+      };
+      if (flags.markdown) {
+        process.stdout.write(conversationMarkdown(read));
+        process.exit(0);
+      }
+      const anchored = read.threads.reduce((sum, thread) => sum + thread.comments.length, 0);
+      say(
+        read,
+        `Pull request #${read.number} of ${named} is ${read.draft && read.state === 'open' ? 'a draft' : read.state}${read.approved ? ', approved' : ''}, with ${read.comments.length} comments, ${read.reviews.length} reviews and ${anchored} comments on lines in ${read.threads.length} threads.`,
+        0,
+      );
+      break;
+    }
+    case 'diff': {
+      const review = await call('GET', '/api/pbi/review', { repository, id });
+      if (review.pullRequest === null) none();
+      process.stdout.write(unifiedDiff(review.change));
+      process.exit(0);
+      break;
+    }
+    case 'review': {
+      const { text, file } = bodyFile();
+      const written = await call('POST', '/api/pbi/review/submit', {}, { repository, id, verdict: flags.verdict, body: text });
+      forget(file);
+      const kept = written.asComment
+        ? `kept as a comment instead of ${flags.verdict === 'approve' ? 'an approval' : 'a request for changes'}, because the vendor said: ${written.asComment}`
+        : `a ${written.verdict ?? flags.verdict} review`;
+      say(
+        { id: written.id, verdict: written.verdict ?? null, asComment: written.asComment ?? null },
+        `The review is on the pull request of ${named}, ${kept}.`,
+        0,
+      );
+      break;
+    }
+  }
+}
+
+/** Flags with a value, and the bare words in order. */
+function parse(args, valued, usage, refuse) {
+  const flags = {};
+  const words = [];
+  for (let i = 0; i < args.length; i++) {
+    const argument = args[i];
+    if (argument === '--markdown') flags.markdown = true;
+    else if (valued.includes(argument)) {
+      const value = args[++i];
+      if (value === undefined || value === '') refuse(`${argument} needs a value after it: ${usage}`);
+      flags[argument.slice(2)] = value;
+    } else if (argument.startsWith('--')) refuse(`unknown flag ${argument}: ${usage}`);
+    else words.push(argument);
+  }
+  return { flags, words };
+}
+
+/**
+ * The control plane at AIO_API for the repository AIO_REPOSITORY or --repo names, and the body file a
+ * write posts. `say` answers the caller's JSON line and ends the process.
+ */
+function connect(flags, usage, say, refuse) {
+  const api = (process.env.AIO_API ?? '').replace(/\/+$/, '');
+  const repository = flags.repo ?? process.env.AIO_REPOSITORY ?? '';
+  if (api === '') {
+    refuse(
+      'AIO_API is not set. It is the control plane\'s address, which the launcher gives every run. In a terminal of your own: export AIO_API=http://localhost:5080 (the address the console is open at).',
+    );
+  }
+  if (repository === '') {
+    refuse('AIO_REPOSITORY is not set and no --repo was given. It is the repository the issue or pull request lives in, such as owner/name: export AIO_REPOSITORY=owner/name.');
+  }
+
+  const bodyFile = () => {
+    const file = flags['body-file'];
+    if (file === undefined) refuse(`--body-file is required: ${usage}`);
+    try {
+      return { text: fs.readFileSync(file === '-' ? 0 : file, 'utf8'), file };
+    } catch (error) {
+      refuse(`could not read ${file}: ${error.message}`);
+    }
+  };
+
+  // A body file the commands wrote under .aio/ goes once the control plane has it, so the
+  // worktree stays clean for `cleanup`.
+  const forget = (file) => {
+    if (file === undefined || file === '-') return;
+    try {
+      // Both real, because a temporary directory on macOS is reached through /var and named /private/var.
+      const harness = fs.realpathSync(path.join(top(), '.aio')) + path.sep;
+      const resolved = fs.realpathSync(file);
+      if (resolved.startsWith(harness)) fs.rmSync(resolved);
+    } catch {
+      // No .aio/, already gone, or not ours to remove: what was posted is posted.
+    }
+  };
+
+  const call = async (method, route, query, body) => {
+    const url = new URL(`${api}${route}`);
+    for (const [name, value] of Object.entries(query ?? {})) url.searchParams.set(name, value);
+    let response;
+    try {
+      response = await fetch(url, {
+        method,
+        headers: body === undefined ? {} : { 'content-type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(60_000),
+      });
+    } catch (error) {
+      const cause = error.cause?.code ?? error.cause?.message ?? error.message;
+      say(
+        null,
+        `aio: could not reach the control plane at ${api}: ${cause}. Check that the console is running there; inside an sbx sandbox it is host.docker.internal, with localhost:<port> allowed for the sandbox.`,
+        1,
+      );
+    }
+    const text = await response.text();
+    let answer = null;
+    try {
+      answer = text === '' ? null : JSON.parse(text);
+    } catch {
+      answer = null;
+    }
+    if (!response.ok) {
+      const errors = answer?.errors ? Object.values(answer.errors).flat().join(' ') : null;
+      // Not JSON is somebody else answering, such as sbx's proxy: its first line says why.
+      const said = answer === null ? text.split('\n')[0].trim() : '';
+      say(null, `aio: ${answer?.detail ?? errors ?? answer?.title ?? `${route} answered ${response.status}${said ? `: ${said}` : ''}`}`, 1);
+    }
+    return answer;
+  };
+
+  return { repository, bodyFile, forget, call };
+}
+
+/** The issue as the Issue tab shows it: the title and what it says about itself, the body, then each comment. */
+function markdown(read) {
+  const lines = [`# ${read.title}`, ''];
+  lines.push(
+    `${read.repository}#${read.id} · ${read.closed ? 'closed' : read.state ?? 'no state'}${read.held ? ' · held' : ''}${read.author ? ` · opened by ${read.author}` : ''}`,
+  );
+  if (read.parent) lines.push(`Part of ${read.parent.repository}#${read.parent.id} ${read.parent.title}`);
+  if (read.children.length > 0) {
+    lines.push('', 'Children:');
+    for (const child of read.children) {
+      lines.push(`- ${child.repository}#${child.id} ${child.title} (${child.closed ? 'closed' : child.state ?? 'no state'})`);
+    }
+  }
+  lines.push('', read.body.trim(), '');
+  for (const comment of read.comments) {
+    lines.push('---', '', `**${comment.author ?? 'someone'}** at ${comment.createdAt}`, '', comment.body.trim(), '');
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+/**
+ * The pull request as a reviewer reads it: what it is and where it stands, its checks, its body, the
+ * conversation in the order it was written, and then every comment anchored to a line under its
+ * `file:line`, which `gh pr view --comments` left out (#651).
+ */
+function conversationMarkdown(read) {
+  const lines = [`# ${read.title}`, ''];
+  const state = read.draft && read.state === 'open' ? 'draft' : read.state;
+  lines.push(
+    `Pull request #${read.number} of ${read.repository}#${read.issue} · ${state}${read.approved ? ' · approved' : ''}${read.author ? ` · opened by ${read.author}` : ''}`,
+    read.url,
+    `${read.head} into ${read.base} at ${read.headSha.slice(0, 7)} · ${read.commits} commits · +${read.additions} −${read.deletions} in ${read.changedFiles} files`,
+  );
+  if (read.checksProblem) lines.push(`Checks: could not be read: ${read.checksProblem}`);
+  else if (read.checks.length === 0) lines.push('Checks: none');
+  else lines.push(`Checks: ${read.checks.map((check) => `${check.name} ${check.state}`).join(', ')}`);
+  lines.push('', read.body.trim() || '(no description)', '');
+
+  // A review with no body says only its verdict; a comment review with none is the envelope of line comments.
+  const said = [
+    ...read.comments.map((comment) => ({ at: comment.at, head: `**${comment.author ?? 'someone'}** at ${comment.at}`, body: comment.body })),
+    ...read.reviews
+      .filter((note) => note.body.trim() !== '' || note.verdict === 'approve' || note.verdict === 'request-changes')
+      .map((note) => ({ at: note.at, head: `**${note.author ?? 'someone'}** at ${note.at} · review: ${note.verdict ?? 'other'}`, body: note.body })),
+  ].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+  for (const entry of said) lines.push('---', '', entry.head, '', entry.body.trim() || '(no text)', '');
+
+  if (read.threads.length > 0) {
+    lines.push('## Comments on lines', '');
+    for (const thread of read.threads) {
+      const where = `${thread.path}:${thread.line ?? 'outdated'}`;
+      const flags = [thread.resolved ? 'resolved' : 'open', ...(thread.outdated ? ['outdated'] : [])].join(', ');
+      lines.push(`### ${where} (${flags})`, '');
+      for (const comment of thread.comments) {
+        lines.push(`**${comment.author ?? 'someone'}** at ${comment.at} on ${where}`, '', comment.body.trim(), '');
+      }
+    }
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+/** The change as `git diff` prints it, built from each file's hunks as the vendor lists them. */
+function unifiedDiff(change) {
+  const out = [];
+  for (const file of change.files) {
+    const before = file.previousPath ?? file.path;
+    out.push(`diff --git a/${before} b/${file.path}`);
+    if (file.previousPath && file.previousPath !== file.path) out.push(`rename from ${file.previousPath}`, `rename to ${file.path}`);
+    if (file.patch === null || file.patch === undefined) {
+      out.push(`Binary or too large: the vendor sends no hunks for ${file.path} (+${file.additions} −${file.deletions})`);
+      continue;
+    }
+    out.push(file.status === 'added' ? '--- /dev/null' : `--- a/${before}`);
+    out.push(file.status === 'removed' ? '+++ /dev/null' : `+++ b/${file.path}`);
+    out.push(file.patch.replace(/\n$/, ''));
+  }
+  if (change.changedFiles > change.files.length) {
+    out.push(`# The vendor listed ${change.files.length} of the ${change.changedFiles} files this pull request changes.`);
+  }
+  return out.length === 0 ? '' : `${out.join('\n')}\n`;
+}

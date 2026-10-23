@@ -1,0 +1,38 @@
+# The question the gate asks: can a Kata pod hold its own Docker daemon, so Testcontainers runs
+# inside the sandbox? `privileged` is privileged inside the pod VM, not on the node — that is what
+# makes Docker-in-Docker defensible under Kata and not under runc.
+#
+# Both containers share the pod's network namespace, which in Kata is the pod VM: the SDK reaches
+# dockerd on localhost, and the ports Testcontainers maps are on that same localhost.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: probe-dind
+  labels: { probe: dind }
+spec:
+  runtimeClassName: kata-vm-isolation
+  nodeSelector: { probe/pool: kata }
+  containers:
+    - name: dockerd
+      image: docker:dind
+      args: ["--host=tcp://127.0.0.1:2375"]
+      env:
+        - { name: DOCKER_TLS_CERTDIR, value: "" }
+      securityContext: { privileged: true }
+      resources:
+        limits: { cpu: "1", memory: 2Gi }
+      volumeMounts:
+        - { name: docker-data, mountPath: /var/lib/docker }
+    - name: sdk
+      image: mcr.microsoft.com/dotnet/sdk:10.0
+      command: ["sleep", "infinity"]
+      env:
+        - { name: DOCKER_HOST, value: "tcp://127.0.0.1:2375" }
+        - { name: DOTNET_CLI_TELEMETRY_OPTOUT, value: "1" }
+      resources:
+        limits: { cpu: "2", memory: 3Gi }
+  # The pod VM is sized from the sum of the limits — without them it gets 512Mi, which a dockerd,
+  # a Postgres and an SDK build do not fit in.
+  volumes:
+    - name: docker-data
+      emptyDir: {}

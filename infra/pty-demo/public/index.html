@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Un PTY, cinco sitios</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
+<style>
+  :root {
+    --bg: #0e1116; --panel: #161b22; --line: #2a313c; --text: #e6edf3; --muted: #8b949e;
+    --accent: #58a6ff; --chip: #1f2630;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 15px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { display: grid; grid-template-rows: auto auto 1fr; }
+  header { padding: 18px 24px 8px; }
+  h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  header p { margin: 4px 0 0; color: var(--muted); }
+  nav { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 24px; border-bottom: 1px solid var(--line); }
+  nav button { background: var(--chip); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 8px 12px; font: inherit; cursor: pointer; }
+  nav button[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  nav button:disabled { opacity: .45; cursor: not-allowed; }
+  main { display: grid; grid-template-rows: auto 1fr; min-height: 0; padding: 12px 24px 20px; gap: 10px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 16px; color: var(--muted); font-size: 14px; }
+  .meta strong { color: var(--text); font-weight: 600; }
+  #term { min-height: 0; background: #000; border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Un PTY, cinco sitios</h1>
+    <p>La terminal es la misma. Cambia el comando que el PTY lanza, y con él el aislamiento.</p>
+  </header>
+  <nav id="backends" aria-label="Backend"></nav>
+  <main>
+    <div class="meta">
+      <span>Aislamiento: <strong id="isolation">—</strong></span>
+      <span>Primer byte: <strong id="latency">—</strong></span>
+    </div>
+    <div id="term"></div>
+  </main>
+
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
+<script>
+  const term = new Terminal({ fontSize: 15, cursorBlink: true, fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace' });
+  const fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+  term.open(document.getElementById("term"));
+  fit.fit();
+
+  let socket;
+  const send = (s) => socket?.readyState === 1 && socket.send(s);
+  term.onData(send);
+  term.onResize(({ cols, rows }) => send("\x00" + JSON.stringify({ cols, rows })));
+  addEventListener("resize", () => fit.fit());
+
+  function connect(b, button) {
+    socket?.close();
+    term.reset();
+    document.querySelectorAll("nav button").forEach((x) => x.setAttribute("aria-pressed", x === button));
+    document.getElementById("isolation").textContent = b.isolation;
+    document.getElementById("latency").textContent = "…";
+    const q = new URLSearchParams({ backend: b.id, cols: term.cols, rows: term.rows });
+    socket = new WebSocket(`ws://${location.host}/?${q}`);
+    socket.onmessage = ({ data }) => {
+      if (data.startsWith("\x00")) {
+        document.getElementById("latency").textContent = JSON.parse(data.slice(1)).firstByteMs + " ms";
+      } else term.write(data);
+    };
+    socket.onclose = (e) => e.reason && term.write(`\r\n\x1b[33m${e.reason}\x1b[0m\r\n`);
+    term.focus();
+  }
+
+  fetch("/backends").then((r) => r.json()).then((list) => {
+    const nav = document.getElementById("backends");
+    for (const b of list) {
+      const button = document.createElement("button");
+      button.textContent = b.label;
+      button.disabled = !!b.disabled;
+      if (b.disabled) button.title = b.disabled;
+      button.onclick = () => connect(b, button);
+      nav.append(button);
+    }
+    nav.querySelector("button:not(:disabled)")?.click();
+  });
+</script>
+</body>
+</html>

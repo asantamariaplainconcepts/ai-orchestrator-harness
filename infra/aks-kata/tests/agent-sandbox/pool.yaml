@@ -1,0 +1,29 @@
+# The warm path: a template, a pool of two pre-booted Kata sandboxes, and a claim that adopts one.
+# The pool size is the loop's WIP limit in miniature; the claim is a run asking for somewhere to go.
+apiVersion: extensions.agents.x-k8s.io/v1beta1
+kind: SandboxTemplate
+metadata:
+  name: agent-kata
+spec:
+  # A probe cluster has no network policy engine, so a managed policy would be written and not
+  # enforced — Unmanaged says that honestly instead of implying an egress fence that is not there.
+  networkPolicyManagement: Unmanaged
+  podTemplate:
+    spec:
+      runtimeClassName: kata-vm-isolation
+      nodeSelector: { probe/pool: kata }
+      containers:
+        - name: agent
+          image: mcr.microsoft.com/azurelinux/base/core:3.0
+          command: ["sleep", "infinity"]
+          resources:
+            requests: { cpu: 500m, memory: 512Mi }
+            limits: { cpu: "1", memory: 512Mi }
+---
+apiVersion: extensions.agents.x-k8s.io/v1beta1
+kind: SandboxWarmPool
+metadata:
+  name: agent-kata
+spec:
+  replicas: 2
+  sandboxTemplateRef: { name: agent-kata }

@@ -1,0 +1,355 @@
+#!/usr/bin/env node
+// Managed by aio. Install harness overwrites it.
+// The agent's PreToolUse hook for Bash and WebFetch. Claude Code hands it the tool call as JSON on
+// stdin; exit 2 refuses the call and stderr is the sentence the agent reads, exit 0 lets it run.
+// Registered in .claude/settings.json.
+//
+// What is refused, because the rules that forbid it are otherwise only written down:
+//
+//   git commit --no-verify (or -n)   the hooks are the gate's first step
+//   git push --no-verify             the same, on the way out (push's -n is --dry-run, allowed)
+//   git -c core.hooksPath=… commit   the same hooks skipped by pointing git elsewhere (#518), or push
+//   gh pr merge                      the one merge is .aio/steps/merge
+//   gh api … that merges a PR        PUT on pulls/<n>/merge, or the GraphQL merge mutations
+//
+// and, because a worktree, its stash stack and its remote can be shared with another session (#731):
+//
+//   git add -A, --all or .           stages another session's work with yours
+//   git commit -a                    the same, at the commit
+//   git reset --hard                 discards every uncommitted change in the worktree
+//   git clean without -- <paths>     deletes every untracked file in the worktree
+//   git checkout . and git restore . discard every unstaged change in the worktree
+//   git stash drop and clear         the stash stack is every worktree's
+//   git push --force without lease   overwrites whatever the remote branch holds
+//   git push of the default branch   origin/HEAD changes by .aio/steps/merge only
+//   WebFetch of a vendor's site      the vendor is read through aio issue, aio pr or its CLI
+//
+// .aio/steps/merge still merges, and the harness's scripts still add, reset and push: a script's
+// own child processes are not tool calls, so they never reach this hook. Only the command line the
+// agent typed is read.
+//
+// The command line is split the way a shell would split it: quotes, then the operators that start a
+// new command (; && || | & newline and parentheses). Text inside quotes is an argument, so a commit
+// message that mentions `gh pr merge` is not a merge, and the body of a heredoc is text, so a file
+// written with `cat <<'EOF'` may mention any command. The exception is the script of `bash -c`
+// (or -lc), `sh -c`, `zsh -c` and `eval`, which is read again as a command line. Anything this cannot
+// read passes: the hook is a guard rail for an agent that follows its instructions, not a sandbox.
+
+const fs = require('node:fs');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+
+const NOTHING = 'Nothing was run.';
+const SHARED = 'and a worktree can hold another session\'s work';
+const MERGE = 'Merges go through .aio/steps/merge <pull request> [expected head sha]: it ' +
+  `squash-merges, deletes the branch at the remote and tags the release. ${NOTHING}`;
+const NO_VERIFY = (verb) => `git ${verb} skips the repository's hooks with --no-verify, and the hooks ` +
+  `are the gate's first step. Fix what they report and run git ${verb} again without it. ${NOTHING}`;
+const HOOKS_PATH = (verb) => `git ${verb} with -c core.hooksPath runs other hooks than the repository's, ` +
+  `and the hooks are the gate's first step. Run git ${verb} again without it. ${NOTHING}`;
+const ADD_ALL = (word) => `git add ${word} stages every change in the worktree, ${SHARED}. ` +
+  `Stage the paths you changed: git add <path> <path>. ${NOTHING}`;
+const COMMIT_ALL = `git commit -a stages every tracked change before it commits, ${SHARED}. ` +
+  `Stage named paths first with git add <path> <path>, then commit without -a. ${NOTHING}`;
+const RESET_HARD = `git reset --hard discards every uncommitted change in the worktree, ${SHARED}. ` +
+  `Revert the paths you touched: git checkout -- <path>. ${NOTHING}`;
+const CLEAN = `git clean without paths deletes every untracked file in the worktree, ${SHARED}. ` +
+  `Scope it: git clean -f -- <path>. ${NOTHING}`;
+const DISCARD = (verb) => `git ${verb} . discards every unstaged change in the worktree, ${SHARED}. ` +
+  `Revert the paths you touched: git ${verb === 'restore' ? 'restore' : 'checkout --'} <path>. ${NOTHING}`;
+const STASH = (verb) => `git stash ${verb} deletes ${verb === 'clear' ? 'every entry' : 'an entry'} of ` +
+  'the stash stack, which every worktree of this repository shares, so it can be another session\'s. ' +
+  `Apply yours by its sha with git stash apply <sha> and leave the stack as it is. ${NOTHING}`;
+const FORCE = 'git push --force overwrites the remote branch whatever it holds, another push too. ' +
+  `Push with --force-with-lease, which refuses when the remote moved. ${NOTHING}`;
+const DEFAULT = (branch) => `git push to ${branch} publishes on the repository's default branch, which ` +
+  `only .aio/steps/merge changes. Push your work branch: git push -u origin <branch>. ${NOTHING}`;
+const VENDOR = (host) => `WebFetch of ${host} reads the vendor around the harness. Issues and pull ` +
+  'requests go through .aio/aio issue and .aio/aio pr, anything else through the ' +
+  `vendor's CLI. ${NOTHING}`;
+
+const VENDORS = ['github.com', 'dev.azure.com', 'visualstudio.com', 'atlassian.net', 'gitlab.com'];
+
+let call;
+try {
+  call = JSON.parse(fs.readFileSync(0, 'utf8'));
+} catch {
+  process.exit(0);
+}
+const cwd = typeof call?.cwd === 'string' ? call.cwd : process.cwd();
+
+let refusal = null;
+if (call?.tool_name === 'Bash' && typeof call?.tool_input?.command === 'string') {
+  refusal = check(call.tool_input.command, 0);
+} else if (call?.tool_name === 'WebFetch' && typeof call?.tool_input?.url === 'string') {
+  refusal = vendor(call.tool_input.url);
+}
+if (refusal) {
+  process.stderr.write(`${refusal}\n`);
+  process.exit(2);
+}
+process.exit(0);
+
+function vendor(url) {
+  let host;
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  return VENDORS.some((name) => host === name || host.endsWith(`.${name}`)) ? VENDOR(host) : null;
+}
+
+function check(line, depth) {
+  for (const words of commands(line)) {
+    const refusal = refuse(words, depth);
+    if (refusal) return refusal;
+  }
+  return null;
+}
+
+// Each command of a line, as its words with quotes removed.
+function commands(line) {
+  const all = [];
+  let words = [];
+  let word = null;
+  const heredocs = [];
+  const end = () => {
+    if (word !== null) words.push(word);
+    word = null;
+  };
+  const next = () => {
+    end();
+    if (words.length) all.push(words);
+    words = [];
+  };
+
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === "'") {
+      const close = line.indexOf("'", i + 1);
+      const stop = close < 0 ? line.length : close;
+      word = (word ?? '') + line.slice(i + 1, stop);
+      i = stop;
+    } else if (c === '"') {
+      let text = '';
+      for (i++; i < line.length && line[i] !== '"'; i++) {
+        if (line[i] === '\\' && i + 1 < line.length) i++;
+        text += line[i];
+      }
+      word = (word ?? '') + text;
+    } else if (c === '\\' && i + 1 < line.length) {
+      if (line[i + 1] !== '\n') word = (word ?? '') + line[i + 1];
+      i++;
+    } else if (line.startsWith('<<<', i)) {
+      word = (word ?? '') + '<<<';
+      i += 2;
+    } else if (line.startsWith('<<', i)) {
+      // A heredoc: its delimiter is read now, its body skipped from the next newline.
+      end();
+      i += 2;
+      if (line[i] === '-') i++;
+      while (line[i] === ' ' || line[i] === '\t') i++;
+      const match = /^(?:'([^']*)'|"([^"]*)"|([^\s;&|()<>]+))/.exec(line.slice(i));
+      if (!match) continue;
+      heredocs.push(match[1] ?? match[2] ?? match[3].replace(/\\/g, ''));
+      i += match[0].length - 1;
+    } else if (';&|()\n`'.includes(c) || (c === '$' && line[i + 1] === '(')) {
+      if (c === '$') i++;
+      next();
+      if (c === '\n') i = skipBodies(line, i, heredocs);
+    } else if (c === ' ' || c === '\t') {
+      end();
+    } else {
+      word = (word ?? '') + c;
+    }
+  }
+  next();
+  return all;
+}
+
+// From the newline at `i`, past the body of each heredoc opened on the line it ends: the index of
+// the newline after the last delimiter line, or the end of the text.
+function skipBodies(line, i, heredocs) {
+  while (heredocs.length) {
+    const delimiter = heredocs.shift();
+    for (;;) {
+      const start = i + 1;
+      if (start >= line.length) return line.length;
+      const newline = line.indexOf('\n', start);
+      i = newline < 0 ? line.length : newline;
+      if (line.slice(start, i).replace(/^\t+/, '').trimEnd() === delimiter) break;
+    }
+  }
+  return i;
+}
+
+function refuse(words, depth) {
+  // Leading assignments and the wrappers that run the rest as a command.
+  let i = 0;
+  while (i < words.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i]) ||
+    ['command', 'exec', 'env', 'sudo', 'time', 'nohup', 'rtk'].includes(words[i]))) i++;
+  const [program, ...args] = words.slice(i);
+  if (!program) return null;
+  const name = program.split('/').pop();
+
+  if (depth < 3 && ['bash', 'sh', 'zsh'].includes(name)) {
+    const c = args.findIndex((word) => /^-[A-Za-z]*c[A-Za-z]*$/.test(word));
+    if (c >= 0 && args[c + 1] !== undefined) return check(args[c + 1], depth + 1);
+  }
+  if (depth < 3 && name === 'eval') return check(args.join(' '), depth + 1);
+  if (name === 'git') return git(args);
+  if (name === 'gh') return gh(args);
+  return null;
+}
+
+// --no-verify, or any prefix git accepts for it (--no-v, --no-ver, …).
+function isNoVerify(word) {
+  return word.length >= 6 && '--no-verify'.startsWith(word.split('=')[0]);
+}
+
+// A cluster of short flags, -am or -fd, as opposed to a long option or a value.
+function isShort(word) {
+  return /^-[A-Za-z]+$/.test(word);
+}
+
+function isEverything(word) {
+  return word === '.' || word === './';
+}
+
+function git(args) {
+  // git's own options come before the subcommand; -C and -c take the next word.
+  let i = 0;
+  let hooksPath = false;
+  let directory = cwd;
+  while (i < args.length && args[i].startsWith('-')) {
+    if (args[i] === '-c' && /^core\.hookspath(=|$)/i.test(args[i + 1] ?? '')) hooksPath = true;
+    if (args[i] === '-C' && args[i + 1] !== undefined) directory = path.resolve(directory, args[i + 1]);
+    i += ['-C', '-c'].includes(args[i]) ? 2 : 1;
+  }
+  const verb = args[i];
+  const rest = args.slice(i + 1);
+
+  if (hooksPath && (verb === 'commit' || verb === 'push')) return HOOKS_PATH(verb);
+  switch (verb) {
+    case 'commit': return commit(rest);
+    case 'push': return push(rest, directory);
+    case 'add': {
+      const all = rest.find((word) => word === '--all' || isEverything(word) || (isShort(word) && word.includes('A')));
+      return all === undefined ? null : ADD_ALL(all);
+    }
+    case 'reset': return rest.includes('--hard') ? RESET_HARD : null;
+    case 'clean': {
+      const dryRun = rest.some((word) => word === '--dry-run' || (isShort(word) && word.includes('n')));
+      const dashes = rest.indexOf('--');
+      return dryRun || (dashes >= 0 && dashes < rest.length - 1) ? null : CLEAN;
+    }
+    case 'checkout':
+    case 'restore': return rest.some(isEverything) ? DISCARD(verb) : null;
+    case 'stash': return ['drop', 'clear'].includes(rest[0]) ? STASH(rest[0]) : null;
+    default: return null;
+  }
+}
+
+function commit(rest) {
+  let all = false;
+  for (let j = 0; j < rest.length; j++) {
+    const word = rest[j];
+    if (word === '--') break;
+    if (isNoVerify(word)) return NO_VERIFY('commit');
+    if (word === '--all') all = true;
+    if (word.startsWith('--')) {
+      if (['--message', '--file', '--reuse-message', '--reedit-message', '--template', '--author',
+        '--date', '--cleanup', '--fixup', '--squash', '--trailer'].includes(word)) j++;
+      continue;
+    }
+    if (!word.startsWith('-') || word === '-') continue;
+    // A cluster of short flags: -an, -nm "text". The first flag that takes a value ends the
+    // cluster, and when nothing follows it inside the word, the next word is that value.
+    for (let k = 1; k < word.length; k++) {
+      if (word[k] === 'n') return NO_VERIFY('commit');
+      if (word[k] === 'a') all = true;
+      if ('mFCct'.includes(word[k])) {
+        if (k === word.length - 1) j++;
+        break;
+      }
+    }
+  }
+  return all ? COMMIT_ALL : null;
+}
+
+function push(rest, directory) {
+  if (rest.some(isNoVerify)) return NO_VERIFY('push');
+
+  let force = false;
+  let lease = false;
+  const positional = [];
+  for (let j = 0; j < rest.length; j++) {
+    const word = rest[j];
+    if (word === '--') {
+      positional.push(...rest.slice(j + 1));
+      break;
+    }
+    if (word.startsWith('--force-with-lease')) lease = true;
+    else if (word === '--force') force = true;
+    else if (['--push-option', '--repo', '--receive-pack', '--exec'].includes(word)) j++;
+    else if (isShort(word)) {
+      if (word.includes('f')) force = true;
+      if (word.endsWith('o')) j++;
+    } else if (!word.startsWith('-')) positional.push(word);
+  }
+  if (force && !lease) return FORCE;
+
+  // The remote's default branch, pushed by name or as the branch the worktree is on. A remote
+  // without a HEAD, or a URL, says nothing and the push passes.
+  const [remote = 'origin', ...refspecs] = positional;
+  if (!/^[\w.-]+$/.test(remote)) return null;
+  const head = read(directory, ['symbolic-ref', '--short', `refs/remotes/${remote}/HEAD`]);
+  const branch = head?.startsWith(`${remote}/`) ? head.slice(remote.length + 1) : null;
+  if (!branch) return null;
+  for (const refspec of refspecs.length ? refspecs : ['HEAD']) {
+    let target = refspec.replace(/^\+/, '');
+    if (target.includes(':')) target = target.slice(target.indexOf(':') + 1);
+    if (target === 'HEAD') target = read(directory, ['symbolic-ref', '--short', 'HEAD']);
+    if (target?.replace(/^refs\/heads\//, '') === branch) return DEFAULT(branch);
+  }
+  return null;
+}
+
+// The line git prints in `directory`, or null when it prints nothing or fails.
+function read(directory, args) {
+  try {
+    return execFileSync('git', ['-C', directory, ...args], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 5000,
+    }).toString().trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function gh(args) {
+  // The words that are not flags, and not the repository -R names: `gh pr -R o/r merge 42`.
+  const verbs = args.filter((word, j) => !word.startsWith('-') && !['-R', '--repo'].includes(args[j - 1]));
+  if (verbs[0] === 'pr' && verbs[1] === 'merge') return MERGE;
+  if (verbs[0] !== 'api') return null;
+
+  const text = args.join(' ');
+  if (/\b(mergePullRequest|enablePullRequestAutoMerge)\b/.test(text)) return MERGE;
+  if (!args.some((word) => /(^|\/)pulls\/[^/\s]+\/merge\/?$/.test(word))) return null;
+
+  // pulls/<n>/merge read with GET says whether a pull request is merged; PUT merges it. gh api
+  // sends GET unless a method is named or a field is passed, which switches it to POST.
+  let method = null;
+  let fields = false;
+  for (let j = 0; j < args.length; j++) {
+    const word = args[j];
+    if (word === '-X' || word === '--method') method = args[++j];
+    else if (word.startsWith('--method=')) method = word.slice('--method='.length);
+    else if (/^-X./.test(word)) method = word.slice(2);
+    else if (['-f', '-F', '--field', '--raw-field', '--input'].includes(word) ||
+      /^(-[fF].|--(raw-)?field=|--input=)/.test(word)) fields = true;
+  }
+  const reads = method ? method.toUpperCase() === 'GET' : !fields;
+  return reads ? null : MERGE;
+}

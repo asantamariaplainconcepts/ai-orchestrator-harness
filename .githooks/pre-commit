@@ -1,0 +1,13 @@
+#!/bin/sh
+# Installed by ai-orchestrator: the trunk of this repository carries no commits.
+# Escape, deliberately verbose: AIORCH_UNGUARDED=1 in the environment.
+[ -n "$AIORCH_UNGUARDED" ] && exit 0
+branch=$(git symbolic-ref --quiet --short HEAD)
+case "$branch" in
+    master|main)
+        echo "This repository works in worktrees: commit on a branch, not $branch."
+        echo "Create one with: git worktree add ../.worktrees/change/<n> -b change/<n> $branch"
+        exit 1
+        ;;
+esac
+exit 0

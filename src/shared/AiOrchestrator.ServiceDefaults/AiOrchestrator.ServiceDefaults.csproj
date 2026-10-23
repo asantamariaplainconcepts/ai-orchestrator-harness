@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>AiOrchestrator.ServiceDefaults</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AiOrchestrator.BuildingBlocks\AiOrchestrator.BuildingBlocks.csproj" />
+  </ItemGroup>
+
+  <!-- Deliberately no cloud SDK. This product runs on the machine in front of you: there is no
+       vault to reach, no queue to publish to, and no tenant to sign into. Secrets come from
+       configuration or a protected directory, and the caller is whoever owns the machine. -->
+  <ItemGroup>
+    <PackageReference Include="CliWrap" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+    <PackageReference Include="Microsoft.Extensions.ServiceDiscovery" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" />
+  </ItemGroup>
+</Project>

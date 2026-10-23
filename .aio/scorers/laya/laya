@@ -1,0 +1,189 @@
+#!/usr/bin/env bash
+# Managed by aio. Install harness overwrites it.
+# The risk node's model server, provisioned by choice and never by itself.
+#
+# laya answers the loop's `risk` node: typed decisions — choice, noul — over HTTP on localhost,
+# one forward pass, no text generation. The scores (risk-score, diff-risk) talk to it; this script
+# is the only thing that provisions it, because a fact step that could install its own interpreter
+# would be a fact step that could change the machine it is a fact about.
+#
+#   ensure   build the venv from the pin if missing, start the server, wait for /health.
+#            Idempotent: with a healthy server it prints that and changes nothing. The loop engine
+#            runs it in the folder's checkout before the first score of a pass (#596).
+#   start    start the server; refuses a live port by naming the pid that holds it
+#   stop     end the server the pidfile names; a stale pidfile is removed, not fatal
+#   status   print server state without starting anything
+#
+# Prerequisite, declared rather than installed: Python 3.10+ on PATH (laya's floor; the
+# huggingface_hub/transformers/torch dependencies all require it).
+#
+# Three facts this script exists to keep true:
+#
+#   Loopback only. `laya-serve` binds 0.0.0.0 by default and its API has no authentication, so
+#   the launcher pins LAYA_HOST=127.0.0.1: a risk score is nobody else's business, and a port
+#   open to the LAN is a service nobody agreed to run.
+#
+#   The environment is the machine's, and so are the weights. The venv, the pidfile and the log live
+#   in ~/.aiorchestrator/laya/<pin>/, beside the installed app's own data and outside every
+#   checkout, so .aio/ holds nothing a run writes (#757). <pin> is the first 12 hex characters
+#   of the SHA-256 of laya-requirements.txt: every worktree and repository on the same pin shares
+#   one environment, where a venv per checkout cost 915 MB and several minutes for each worktree
+#   that scored; a pin edit is a new directory, so it builds beside the old one and a checkout still
+#   on the old pin keeps working. The pid and log are shared because the server is: one fixed port
+#   means one server per machine, and a pidfile per checkout let `stop` in one worktree miss the
+#   server another had started. A build takes <pin>/.lock first, so two `ensure`s at once build
+#   once. An old pin's directory is removed by hand, `rm -rf ~/.aiorchestrator/laya/<pin>`, once
+#   no checkout uses it. The weights (~1.7 GB) go to Hugging Face's own cache in the user's home —
+#   per machine already, and per worktree they would be a terabyte of the same three files.
+#
+#   SSL_CERT_FILE is pinned to the venv's certifi bundle. The Homebrew Python on macOS ships
+#   without the system trust store, and a fresh `ensure` fails its weight download with
+#   CERTIFICATE_VERIFY_FAILED otherwise — hit and fixed during this change's first run, and the
+#   reason this line is here rather than in a troubleshooting document nobody reads mid-install.
+set -uo pipefail
+
+here=$(cd "$(dirname "$0")" && pwd)
+# shasum on macOS, sha256sum where perl's shasum is missing; the pin is the same digest either way.
+pin=$( { shasum -a 256 "$here/laya-requirements.txt" 2>/dev/null || sha256sum "$here/laya-requirements.txt"; } | cut -c1-12)
+data="$HOME/.aiorchestrator/laya/$pin"
+lock="$data/.lock"
+venv="$data/venv"
+pidfile="$data/laya-serve.pid"
+logfile="$data/laya-serve.log"
+
+host=127.0.0.1
+port=8317
+url="http://$host:$port"
+
+die() { echo "laya: $*" >&2; exit 1; }
+
+# A python that can run laya, or a named refusal. Python 3.9 — the macOS system python — cannot.
+find_python() {
+  for candidate in "$venv/bin/python" python3.12 python3.11 python3.10 python3; do
+    command -v "$candidate" >/dev/null 2>&1 || continue
+    if "$candidate" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then
+      echo "$candidate"; return 0
+    fi
+  done
+  return 1
+}
+
+healthy() { curl -fsS -m 2 "$url/health" >/dev/null 2>&1; }
+
+pid_alive() {
+  local pid=$1
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+read_pid() { [ -r "$pidfile" ] && cat "$pidfile" 2>/dev/null; }
+
+# One build and one start at a time on this machine and pin. mkdir is atomic and needs no flock,
+# which macOS lacks. The lock covers the start as well as the build: two starts would race for the
+# one port and the loser would overwrite the shared pidfile with a pid that has already exited. A
+# waiter re-checks what the holder left — a healthy server, a built venv — instead of redoing it.
+# A lock whose holder is gone (killed before its trap ran) is stale and taken over.
+take_lock() {
+  mkdir -p "$data" || die "could not create $data"
+  local waited=0 holder
+  until mkdir "$lock" 2>/dev/null; do
+    holder=$(cat "$lock/pid" 2>/dev/null)
+    if [ -n "$holder" ] && ! pid_alive "$holder"; then rm -rf "$lock"; continue; fi
+    [ "$waited" -eq 0 ] && echo "laya: another ensure (pid ${holder:-?}) holds $lock, waiting for it"
+    sleep 1; waited=$((waited + 1))
+    # A build and the first health wait together, each bounded at 1800 s below.
+    [ "$waited" -ge 3600 ] && die "$lock still held after ${waited}s — remove it if pid ${holder:-?} is gone"
+  done
+  echo $$ >"$lock/pid"
+  trap 'rm -rf "$lock"' EXIT
+}
+
+start_server() {
+  local python
+  python=$(find_python) || die "no Python 3.10+ on PATH — laya needs it; install one (brew install python@3.12) and re-run"
+
+  # The venv is built from the pin, not from the machine's mood: a scorer's answers should not
+  # depend on which patch of torch happened to be current. Rebuilt only when missing, so an
+  # upgrade is a requirements-file edit and an `ensure` with the venv removed — visible in review.
+  if [ ! -x "$venv/bin/laya-serve" ]; then
+    # Built in place, not aside and moved: a moved venv's bin/ shebangs name the old path. A
+    # failed build is removed whole, so nothing that looks provisioned is left for the next ensure.
+    echo "laya: building venv from .aio/scorers/laya/laya-requirements.txt in $venv (once per machine and pin)"
+    "$python" -m venv "$venv" || { rm -rf "$venv"; die "could not create the venv under $data"; }
+    "$venv/bin/python" -m pip install -q -r "$here/laya-requirements.txt" \
+      || { rm -rf "$venv"; die "pip install from the pin failed — see the output above"; }
+  fi
+
+  # The certifi bundle inside the venv: present because laya depends on it for its own calls, and
+  # correct for the download because Hugging Face's certificate chains to it. Both requests-lib
+  # and anything reading ssl directly are covered by the pair.
+  local certs
+  certs=$("$venv/bin/python" -m certifi 2>/dev/null) || certs=""
+
+  LAYA_HOST=$host LAYA_PORT=$port \
+  SSL_CERT_FILE=${certs:-} REQUESTS_CA_BUNDLE=${certs:-} \
+    nohup "$venv/bin/laya-serve" >>"$logfile" 2>&1 &
+  echo $! >"$pidfile"
+  echo "laya: server started (pid $(cat "$pidfile")), waiting for $url/health"
+
+  # The first start downloads ~1.7 GB of weights before /health answers; a warm start takes
+  # ~40 s of checkpoint loading. Neither is retried here — this waits, once, and says why it
+  # failed if it does.
+  local waited=0
+  until healthy; do
+    sleep 5; waited=$((waited + 5))
+    pid_alive "$(read_pid)" || { tail -5 "$logfile" >&2; die "the server exited before it was healthy (see $logfile)"; }
+    [ "$waited" -ge 1800 ] && die "no /health after ${waited}s — see $logfile"
+  done
+  echo "laya: healthy at $url after ${waited}s"
+}
+
+cmd_ensure() {
+  if healthy; then echo "laya: already healthy at $url"; return 0; fi
+  take_lock
+  if healthy; then echo "laya: already healthy at $url"; return 0; fi
+  start_server
+}
+
+cmd_start() {
+  if healthy; then echo "laya: already healthy at $url (nothing started)"; return 0; fi
+  take_lock
+  if healthy; then echo "laya: already healthy at $url (nothing started)"; return 0; fi
+  local pid; pid=$(read_pid)
+  # A server from another checkout on this port is indistinguishable from ours once healthy, and
+  # that is fine for the scorer — only this script refuses to replace somebody else's live pid.
+  if pid_alive "$pid"; then die "pid $pid is recorded but not healthy — see $logfile, or stop it first"; fi
+  start_server
+}
+
+cmd_stop() {
+  local pid; pid=$(read_pid)
+  if pid_alive "$pid"; then
+    kill "$pid" && echo "laya: stopped pid $pid"
+    local waited=0
+    while pid_alive "$pid" && [ "$waited" -lt 15 ]; do sleep 1; waited=$((waited + 1)); done
+    pid_alive "$pid" && echo "laya: pid $pid did not exit within 15s — it may need a person" >&2
+  else
+    echo "laya: nothing running (stale or absent pidfile)"
+  fi
+  rm -f "$pidfile"
+}
+
+cmd_status() {
+  if healthy; then
+    echo "healthy at $url (pid $(read_pid))"
+  elif [ -r "$pidfile" ]; then
+    echo "pidfile present (pid $(read_pid)), not healthy — see $logfile"
+    exit 1
+  else
+    echo "not provisioned in $data — .aio/scorers/laya/laya ensure starts one"
+    exit 1
+  fi
+}
+
+case "${1:-}" in
+  ensure) cmd_ensure ;;
+  start) cmd_start ;;
+  stop) cmd_stop ;;
+  status) cmd_status ;;
+  *) die "usage: laya {ensure|start|stop|status}" ;;
+esac

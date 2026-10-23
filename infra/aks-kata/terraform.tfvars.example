@@ -1,0 +1,7 @@
+subscription_id     = "<subscription-id>"
+resource_group_name = "proposals-dev-rg-01"
+
+tags = {
+  owner      = "<owner-email>"
+  expiration = "same day — destroy after the probe"
+}

@@ -1,0 +1,16 @@
+# The Sandbox backend 4 attaches to, on infra/kata-local's k3s: sandbox.yaml plus
+# `runtimeClassName: kata-qemu`. Nothing else changes, which is the point the demo makes.
+apiVersion: agents.x-k8s.io/v1beta1
+kind: Sandbox
+metadata:
+  name: pty-demo
+spec:
+  podTemplate:
+    spec:
+      runtimeClassName: kata-qemu
+      containers:
+        - name: agent
+          image: docker.io/library/alpine:3.22
+          command: ["sleep", "infinity"]
+          resources:
+            limits: { cpu: "1", memory: 512Mi }

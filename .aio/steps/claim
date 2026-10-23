@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Managed by aio. Install harness overwrites it.
+# The claim: create change/<issue> at origin, and answer {claimed, why}. Exit 0 when this clone holds
+# the issue, 1 when it does not.
+#
+#   .aio/steps/claim <issue> [base]      base defaults to HEAD
+#
+# The branch is the claim (ADR-0005), and a push is the only answer two machines both see. Pushing the
+# base itself is not enough: two clones that just fetched the trunk push the same commit, and the
+# second push exits 0 as "up to date". So the claim is an empty commit of its own on top of the base,
+# made without a checkout (commit-tree) — no other clone can push that SHA, and a second claimant is
+# rejected as a non-fast-forward.
+#
+# The claim commit is remembered in refs/aio/claims/<issue>. A rerun from this clone — a propose that
+# failed after claiming — finds its own commit in origin's branch and carries on, instead of losing to
+# itself. The squash merge leaves the commit out of the trunk.
+#
+# commit-tree takes its committer from GIT_COMMITTER_NAME and GIT_COMMITTER_EMAIL, which the engine
+# sets to `aio script claim` for every script it runs (#741): on GitHub the claim reads as the loop's.
+set -uo pipefail
+export LC_ALL=C  # git's sentences are read here, and the C locale keeps them in English (#762)
+
+issue="${1:-}"
+base="${2:-HEAD}"
+branch="change/$issue"
+export GIT_TERMINAL_PROMPT=0
+
+say() { printf '{"claimed": %s, "why": "%s"}\n' "$1" "$(printf '%s' "$2" | tr '\n"\\' "  '")"; }
+
+[[ "$issue" =~ ^[0-9]+$ ]] || { say false "claim: no issue number given"; exit 1; }
+
+ours() { # is this clone's recorded claim in origin's branch?
+  local mine
+  mine=$(git rev-parse -q --verify "refs/aio/claims/$issue") || return 1
+  git fetch -q origin "+refs/heads/$branch:refs/remotes/origin/$branch" 2>/dev/null || return 1
+  git merge-base --is-ancestor "$mine" "origin/$branch"
+}
+
+if ours; then
+  say true "$branch already carries this clone's claim."
+  exit 0
+fi
+
+tip=$(git rev-parse -q --verify "$base^{commit}") || { say false "claim: $base is not a commit here"; exit 1; }
+claim=$(git commit-tree "$tip^{tree}" -p "$tip" -m "Claim #$issue from $(hostname -s 2>/dev/null || echo unknown)") \
+  || { say false "claim: git could not write the claim commit"; exit 1; }
+
+if git push --porcelain origin "$claim:refs/heads/$branch" 2>/dev/null | grep -q '^\*'; then
+  git update-ref "refs/aio/claims/$issue" "$claim"
+  # Standing on the base, on this branch: take the claim commit so the next push is a fast-forward.
+  if [ "$(git symbolic-ref -q --short HEAD)" = "$branch" ] && [ "$(git rev-parse HEAD)" = "$tip" ]; then
+    git merge -q --ff-only "$claim"
+  fi
+  say true "$branch created at origin."
+  exit 0
+fi
+
+say false "$branch already exists at origin, and not from this clone: someone else holds #$issue."
+exit 1

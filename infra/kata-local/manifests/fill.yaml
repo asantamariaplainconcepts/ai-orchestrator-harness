@@ -1,0 +1,19 @@
+# As many Kata pods as the node takes. measure.sh scales it up in steps until one step does not
+# come up; no requests and no limits, so what stops it is the RuntimeClass overhead and the node.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kata-fill
+spec:
+  replicas: 0
+  selector: { matchLabels: { probe: fill } }
+  template:
+    metadata:
+      labels: { probe: fill }
+    spec:
+      runtimeClassName: kata-qemu
+      terminationGracePeriodSeconds: 0
+      containers:
+        - name: main
+          image: docker.io/library/alpine:3.22
+          command: ["sleep", "infinity"]

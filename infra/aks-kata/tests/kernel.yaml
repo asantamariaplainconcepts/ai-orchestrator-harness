@@ -1,0 +1,28 @@
+# Two pods on the same Kata node: one under runc, one under kata-vm-isolation. If the sandbox is
+# real, `uname -r` answers two different kernels.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: probe-runc
+  labels: { probe: kernel }
+spec:
+  nodeSelector: { probe/pool: kata }
+  containers:
+    - name: main
+      image: mcr.microsoft.com/azurelinux/base/core:3.0
+      command: ["sleep", "infinity"]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: probe-kata
+  labels: { probe: kernel }
+spec:
+  runtimeClassName: kata-vm-isolation
+  nodeSelector: { probe/pool: kata }
+  containers:
+    - name: main
+      image: mcr.microsoft.com/azurelinux/base/core:3.0
+      command: ["sleep", "infinity"]
+      resources:
+        limits: { cpu: "1", memory: 512Mi }

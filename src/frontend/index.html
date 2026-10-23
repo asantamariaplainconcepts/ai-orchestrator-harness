@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Orchestrator</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- Installable as a PWA — standalone display is also what recovers the keys the browser eats
+         (⌘W, Ctrl+W…), which is I2's second half. Deliberately no service worker: the app talks to
+         its own local server, so offline caching buys nothing and a stale cached bundle costs. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- The standalone window's title bar follows the app's surface, per theme. -->
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0d0e0f" media="(prefers-color-scheme: dark)" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/app/main.tsx"></script>
+  </body>
+</html>

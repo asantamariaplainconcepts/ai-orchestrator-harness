@@ -1,0 +1,41 @@
+{
+  "$comment": "Managed by aio. Install harness overwrites it.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/asantamariaplainconcepts/ai-orchestrator-harness/.aio/schemas/done.v1.json",
+  "title": "End record of a run, version 1",
+  "description": "What `.aio/aio done` writes to .aio/done.json in the run's checkout when an agent finishes, and what Modules.Runs reads as untrusted input. The outcome is a free string that the state's `on` maps; `blocked` is reserved and fails the run with its reason.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "outcome", "at"],
+  "properties": {
+    "version": {
+      "description": "The schema version. A reader refuses any other.",
+      "const": 1
+    },
+    "outcome": {
+      "description": "The result the state's `on` maps, such as approved, rejected, ready or gaps. `blocked` means the agent could not go on.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "maxLength": 64
+    },
+    "reason": {
+      "description": "Why, in the agent's words. Required when the outcome is blocked.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000
+    },
+    "problems": {
+      "description": "Problems the agent found and did not fix, one per entry.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 4000 },
+      "maxItems": 100
+    },
+    "at": {
+      "description": "When the record was written, in UTC. A record older than its run belongs to an earlier run.",
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "if": { "properties": { "outcome": { "const": "blocked" } }, "required": ["outcome"] },
+  "then": { "required": ["reason"] }
+}

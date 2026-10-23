@@ -1,0 +1,5 @@
+# runtime-rs only: it gives the agent 3 s to answer, and a pod VM took 11 to 28 s to boot in this
+# VM, so kata-qemu-runtime-rs gave up where kata-qemu, which waits 45 s (dial_timeout), did not.
+# The Go runtime rejects a drop-in with a key it does not know, so this cannot share its file.
+[agent.kata]
+reconnect_timeout_ms = 60000

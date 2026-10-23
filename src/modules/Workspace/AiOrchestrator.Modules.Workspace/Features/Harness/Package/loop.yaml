@@ -1,0 +1,87 @@
+# The loop the harness package installs, in the format of README.md#the-loop. Each state is the
+# status:* label a PBI carries while it is in it, and the file reads top to bottom: a transition to a
+# state above the one it leaves goes back, and needs max_loops. A target no state declares (done,
+# needs-refinement) is a state where the loop does nothing.
+#
+# After the gate, evidence publishes the screens a change touched, as evidence in .aio/config.json says. Its
+# passed and skipped leave the gate's green to decide; its blocked (the captures were needed and could
+# not be taken) and failed (the repository's capture failed) hold the PBI, because the first outcome
+# that holds is the state's. Then quality publishes the change's coverage, CRAP, mutation, duplication
+# and lost tests, as quality in .aio/config.json says; it reports and holds nothing.
+#
+# No scores, so a PBI waits for a person only on a red gate, evidence that could not be taken, a
+# conflict, a failed run or the review rounds used up. No OpenSpec and no rebasing state: /aio:propose
+# writes a short plan on the issue, and a conflict in merging holds the PBI with its reason. Every role
+# is claude-code with its default model; name a model, or another provider, once the loop has run here.
+name: issue-loop
+wip: 1
+
+agents:
+  refiner:
+    provider: claude-code
+  coder:
+    provider: claude-code
+  reviewer:
+    provider: claude-code
+
+states:
+  ready-for-proposal:
+    agent: refiner
+    command: /aio:refine
+    on:
+      ready: spec-ready
+      gaps: needs-refinement
+
+  spec-ready:
+    script:
+      - file-overlap
+      - claim
+    agent: coder
+    command: /aio:propose
+    next: in-progress
+    pr: draft
+
+  in-progress:
+    agent: coder
+    command: /aio:implement
+    next: verifying
+
+  verifying:
+    script:
+      - gate
+      - evidence
+      - quality
+    on:
+      green:
+        next: code-review
+        pr: ready
+      red:
+        hold: The gate is red
+      blocked:
+        hold: The evidence was needed and could not be taken
+      failed:
+        hold: The evidence's captures failed
+
+  code-review:
+    agent: reviewer
+    command: /aio:review-diff
+    max_loops: 2
+    back: in-progress
+    tab: review
+    on:
+      rejected: in-progress
+      approved: retro
+
+  retro:
+    agent: coder
+    command: /aio:review
+    next: merging
+
+  merging:
+    script: merge
+    on:
+      merged:
+        next: done
+        pr: close
+      conflict:
+        hold: The branch conflicts with the trunk

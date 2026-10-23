@@ -1,0 +1,11 @@
+#cloud-config
+# sbx on Ubuntu 24.04: Docker's own installer with SBX=1 brings Docker Engine and sbx together
+# (docs.docker.com/ai/sandboxes/install). sbx needs /dev/kvm and the user in the kvm group; the
+# marker file at the end is what tests/run.sh waits for.
+package_update: true
+packages: [cpu-checker, git, jq]
+runcmd:
+  - curl -fsSL https://get.docker.com | SBX=1 sh
+  - usermod -aG kvm,docker azureuser
+  - kvm-ok > /var/log/kvm-ok.log 2>&1 || true
+  - touch /var/lib/cloud/sbx-ready

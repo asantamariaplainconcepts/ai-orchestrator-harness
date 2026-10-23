@@ -1,0 +1,54 @@
+# Publishes the .NET tool aio to nuget.org with Trusted Publishing: no API key is stored anywhere.
+# NuGet/login trades this run's GitHub OIDC token for a key that lives one hour, and
+# scripts/release does the rest exactly as on a laptop: pack, push, then tag v<Version> on
+# the commit this run checked out and write its GitHub release, without waiting for nuget.org to list it.
+#
+# Run it by hand (Actions → release → Run workflow) after the version raise is merged on master.
+# The nuget.org policy names this repository and this file, release.yml.
+name: release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write # the tag and the GitHub release
+  id-token: write # the OIDC token NuGet/login trades
+
+concurrency: release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # release gathers its notes from every merge since the previous tag
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: src/frontend/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: NuGet/login@v1
+        id: nuget
+        with:
+          user: andonisantamaria # the nuget.org profile that owns the policy, not a secret
+
+      - name: release
+        env:
+          NUGET_API_KEY: ${{ steps.nuget.outputs.NUGET_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        # The script's JSON line goes to the run's summary too, red or green (#711).
+        run: |
+          code=0
+          line=$(scripts/release "$GITHUB_SHA") || code=$?
+          echo "$line"
+          printf '~~~json\n%s\n~~~\n' "$line" >> "$GITHUB_STEP_SUMMARY"
+          exit "$code"

@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>AiOrchestrator.Modules.Workspace</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\shared\AiOrchestrator.BuildingBlocks\AiOrchestrator.BuildingBlocks.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ErrorOr" />
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <!-- Design-time only (#679): dotnet ef runs with this module as its own startup project, and
+         neither the Server nor the aio package carries it or the Roslyn it brings. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <!-- #566. The states of the package's loop, which installing creates at the vendor. -->
+    <PackageReference Include="YamlDotNet" />
+  </ItemGroup>
+
+  <!-- #563. The harness package rides in this module, beside the folders it is installed into. -->
+  <Import Project="Features\Harness\Package\package.props" />
+
+  <ItemGroup>
+    <!-- Tests drive the module's internals directly; its public surface stays empty by design. -->
+    <InternalsVisibleTo Include="AiOrchestrator.Modules.Workspace.FunctionalTests" />
+  </ItemGroup>
+</Project>

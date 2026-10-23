@@ -1,0 +1,200 @@
+#!/usr/bin/env node
+// Managed by aio. Install harness overwrites it.
+// Captures the screens a change touched and publishes them on its issue (#598). `verifying` runs it
+// after the gate, in the PBI's worktree:
+//
+//   .aio/steps/evidence <issue>
+//
+// It answers {outcome, published, comment, why}, and the why says what it published or why it
+// published nothing, so the Journey can show it. The outcome is one of four (#733):
+//
+// - `passed`: it published;
+// - `skipped`: nothing asked for captures: no `evidence` in .aio/config.json, no `paths`, or nothing changed in them;
+// - `blocked`: captures were asked for and could not be taken: the app did not start, the capture did
+//   not start, a shot or gh failed, or .aio/config.json cannot say what to capture;
+// - `failed`: the repository's capture ran and failed, which is its tests failing.
+//
+// It exits 0 on passed and skipped and 1 on blocked and failed, so a loop.yaml whose on names none of
+// the four still holds the PBI on the two that need a person.
+//
+// What to capture is the repository's own .aio/config.json, under evidence (#709), which may carry // comment
+// lines. Without it, or with no `paths`, nothing is captured.
+//
+// - `paths`: the globs whose change against the pull request's base (origin/HEAD without a pull
+//   request) asks for captures. Nothing changed inside them: nothing is captured.
+// - `start` and `routes`: start the app, either {"aspire": "<apphost.csproj>", "resource": "<name>"},
+//   started with `aspire start --isolated` and found through `aspire describe`, or
+//   {"command": "...", "url": "http://..."}, run in the background until the URL answers. Each route,
+//   with `tomorrow` replaced by tomorrow's date, is shot with `npx playwright screenshot` in light and
+//   dark at 1440x900 and 390x844, and the app is stopped.
+// - `capture`: {"command": "...", "screens": "<folder>"} instead, for a repository whose own tests take
+//   the screenshots. The command leaves each PNG in the folder beside a JSON sidecar
+//   {screen, module, viewport, theme}. A screen is touched when the change is inside the features/
+//   folder its module lives in; a change anywhere else, or in a folder no screen lives in, touches
+//   every screen.
+//
+// One comment on the issue carries the captures, one `gh issue comment --attach` each, at most 50 (what
+// one gh call attaches). It opens with <!-- aio:evidence <head sha> -->, which the Review tab looks
+// for, and each image's alt text is `<screen or route> <width>x<height> <theme>`.
+'use strict';
+
+const { spawn, spawnSync } = require('node:child_process');
+process.env.LC_ALL = 'C'; // git's sentences in English whatever the machine's language (#762)
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+const cleanups = [];
+const clean = () => cleanups.splice(0).reverse().forEach((cleanup) => cleanup());
+const answer = (outcome, why, comment = null) => {
+  clean();
+  process.stdout.write(`${JSON.stringify({ outcome, published: comment !== null, comment, why: why.replace(/\s+/g, ' ').trim() })}\n`);
+  process.exit(outcome === 'passed' || outcome === 'skipped' ? 0 : 1);
+};
+const skipped = (why) => answer('skipped', why);
+const blocked = (why) => answer('blocked', why);
+const env = { ...process.env, GH_PAGER: 'cat', GH_PROMPT_DISABLED: '1', NO_COLOR: '1' };
+const run = (command, args, cwd) => spawnSync(command, args, { cwd, env, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+const lines = (step) => `${step.stdout || ''}\n${step.stderr || ''}`.split('\n').map((line) => line.trim()).filter(Boolean);
+const said = (step, pick = () => true) => (step.error ? `${step.error.code}` : (lines(step).filter(pick)[0] || lines(step).pop() || `exit ${step.status}`).slice(0, 300));
+const erred = (line) => /\b(failed|error)\b/i.test(line);
+const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+const issue = process.argv[2] || '';
+if (!/^\d+$/.test(issue)) blocked('evidence: no issue number given');
+const root = run('git', ['rev-parse', '--show-toplevel'], process.cwd()).stdout?.trim();
+if (!root) blocked(`evidence: ${process.cwd()} is not a git checkout`);
+const head = run('git', ['rev-parse', 'HEAD'], root).stdout.trim();
+
+const file = path.join(root, '.aio', 'config.json');
+if (!fs.existsSync(file)) skipped('Nothing published: this repository has no .aio/config.json, so it says nothing to capture.');
+let config;
+try {
+  config = JSON.parse(fs.readFileSync(file, 'utf8').split('\n').filter((line) => !line.trim().startsWith('//')).join('\n')).evidence;
+} catch (error) {
+  blocked(`Nothing published: .aio/config.json is not JSON: ${error.message}`);
+}
+if (!config || typeof config !== 'object') skipped('Nothing published: .aio/config.json has no evidence, so it says nothing to capture.');
+const globs = Array.isArray(config.paths) ? config.paths.filter((glob) => typeof glob === 'string' && glob) : [];
+if (!globs.length) skipped('Nothing published: .aio/config.json (evidence) names no paths.');
+
+const pattern = (glob) => new RegExp(`^${glob.split(/(\*\*\/|\*\*|\*|\?)/).map((part) =>
+  ({ '**/': '(?:.*/)?', '**': '.*', '*': '[^/]*', '?': '[^/]' })[part] ?? part.replace(/[.+^${}()|[\]\\]/g, '\\$&')).join('')}$`);
+const patterns = globs.map(pattern);
+
+const pr = run('gh', ['pr', 'view', '--json', 'baseRefName', '--jq', '.baseRefName'], root);
+const base = pr.status === 0 && pr.stdout.trim() ? `origin/${pr.stdout.trim()}` : 'origin/HEAD';
+const diff = run('git', ['diff', '--name-only', `${base}...HEAD`], root);
+if (diff.status !== 0) blocked(`Nothing published: ${base} is not a base this checkout can diff against (${said(diff)}).`);
+const changed = diff.stdout.split('\n').filter((name) => name && patterns.some((glob) => glob.test(name)));
+if (!changed.length) skipped(`Nothing published: nothing in ${globs.join(', ')} changed against ${base}.`);
+if (!config.capture && !config.start) blocked('Nothing published: .aio/config.json (evidence) names neither start nor capture.');
+
+const chosen = config.capture ? captured(config.capture) : shot(config.start, config.routes);
+const sent = chosen.slice(0, 50);
+
+const short = head.slice(0, 7);
+const left = chosen.length > sent.length ? ` ${chosen.length - sent.length} more were left out: one comment carries 50.` : '';
+const what = config.capture ? 'the screens this change touched' : 'the routes .aio/config.json (evidence) names';
+const body = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'aio-evidence-')), 'body.md');
+cleanups.push(() => fs.rmSync(path.dirname(body), { recursive: true, force: true }));
+fs.writeFileSync(body, `<!-- aio:evidence ${head} -->\nEvidence for #${issue}: ${sent.length} capture${sent.length === 1 ? '' : 's'} of \`${short}\`, ${what}.${left}\n`);
+const gh = run('gh', ['issue', 'comment', issue, '--body-file', body, ...sent.flatMap((one) => ['--attach', `${one.png}#${one.alt}`])], root);
+const url = (`${gh.stdout || ''}`.match(/https:\/\/\S+#issuecomment-\d+/) || [])[0];
+if (gh.status !== 0 || !url) blocked(`Nothing published: gh could not attach: ${said(gh)}`);
+answer('passed', `Published ${sent.length} capture${sent.length === 1 ? '' : 's'} of ${short} in ${url}.${left}`, url);
+
+/** Runs the repository's own capture and picks the screens the change touched. */
+function captured({ command, screens }) {
+  if (!command || !screens) blocked('Nothing published: the capture in .aio/config.json (evidence) needs a command and a screens folder.');
+  const folder = path.resolve(root, screens);
+  fs.rmSync(folder, { recursive: true, force: true });
+  const step = run('sh', ['-c', command], root);
+  // The shell's 126 and 127 are a command it could not run, and a signal or a spawn error is no
+  // verdict either: the capture did not start. Any other exit is its own tests failing.
+  if (step.error || step.signal || step.status === 126 || step.status === 127) blocked(`Nothing published: the capture did not start: ${said(step, erred)}`);
+  if (step.status !== 0) answer('failed', `Nothing published: the capture failed: ${said(step, erred)}`);
+
+  const home = (name) => (/^(?:src\/frontend\/)?(features\/[^/]+)\//.exec(name) || [])[1] || null;
+  const shots = (fs.existsSync(folder) ? fs.readdirSync(folder) : []).filter((name) => name.endsWith('.json')).sort().flatMap((name) => {
+    try {
+      const { screen, module, viewport, theme } = JSON.parse(fs.readFileSync(path.join(folder, name), 'utf8'));
+      const png = path.join(folder, name.replace(/\.json$/, '.png'));
+      return fs.existsSync(png) ? [{ png, home: home(module || ''), alt: `${screen} ${viewport.width}x${viewport.height} ${theme}` }] : [];
+    } catch {
+      return [];
+    }
+  });
+  const homes = new Set(shots.map((one) => one.home));
+  const touched = changed.map(home);
+  const every = touched.some((one) => !one || !homes.has(one));
+  const picked = shots.filter((one) => every || touched.includes(one.home));
+  if (!picked.length) blocked('Nothing published: the capture passed and left no PNG with its sidecar.');
+  return picked;
+}
+
+/** Starts the app, shoots every route in both themes at both widths, and leaves the app stopped. */
+function shot(start, routes) {
+  if (!Array.isArray(routes) || !routes.length) blocked('Nothing published: .aio/config.json (evidence) names no routes.');
+  const address = start.aspire ? aspire(start) : start.command && start.url ? command(start) : null;
+  if (!address) blocked('Nothing published: start in .aio/config.json (evidence) needs aspire and resource, or command and url.');
+
+  const install = run('npx', ['--yes', 'playwright', 'install', 'chromium'], root);
+  if (install.status !== 0) blocked(`Nothing published: playwright could not install chromium: ${said(install, erred)}`);
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'aio-evidence-shots-'));
+  const tomorrow = new Date(Date.now() + 864e5);
+  const day = `${tomorrow.getFullYear()}-${`${tomorrow.getMonth() + 1}`.padStart(2, '0')}-${`${tomorrow.getDate()}`.padStart(2, '0')}`;
+  const shots = [];
+  routes.forEach((route, index) => {
+    const where = String(route).replace(/\btomorrow\b/g, day);
+    for (const [width, height] of [[1440, 900], [390, 844]]) {
+      for (const theme of ['light', 'dark']) {
+        const png = path.join(folder, `${index}.${width}.${theme}.png`);
+        const step = run('npx', ['--yes', 'playwright', 'screenshot', '--color-scheme', theme, '--viewport-size', `${width},${height}`,
+          '--wait-for-timeout', '1500', new URL(where, address).href, png], root);
+        if (step.status !== 0 || !fs.existsSync(png)) blocked(`Nothing published: playwright could not shoot ${where}: ${said(step, erred)}`);
+        shots.push({ png, alt: `${where} ${width}x${height} ${theme}` });
+      }
+    }
+  });
+  clean();
+  cleanups.push(() => fs.rmSync(folder, { recursive: true, force: true }));
+  return shots;
+}
+
+/** `aspire start --isolated`, then the resource's http URL from `aspire describe`; stopped on the way out. */
+function aspire({ aspire: project, resource }) {
+  if (!resource) return null;
+  const apphost = path.resolve(root, project);
+  const quiet = ['--apphost', apphost, '--non-interactive', '--nologo'];
+  const started = run('aspire', ['start', '--isolated', ...quiet], root);
+  if (started.status !== 0) blocked(`Nothing published: aspire start failed: ${said(started, erred)}`);
+  cleanups.push(() => run('aspire', ['stop', ...quiet], root));
+  const waited = run('aspire', ['wait', resource, '--timeout', '300', ...quiet], root);
+  if (waited.status !== 0) blocked(`Nothing published: ${resource} did not become healthy: ${said(waited)}`);
+  const described = run('aspire', ['describe', resource, '--format', 'Json', ...quiet], root);
+  let urls = [];
+  try {
+    urls = JSON.parse(described.stdout.slice(described.stdout.indexOf('{'))).resources.flatMap((one) => one.urls || []).map((one) => one.url);
+  } catch {
+    blocked(`Nothing published: aspire describe ${resource} answered no JSON: ${said(described)}`);
+  }
+  const found = urls.find((one) => one.startsWith('http:')) || urls[0];
+  if (!found) blocked(`Nothing published: aspire describe names no URL for ${resource}.`);
+  return found;
+}
+
+/** Runs the command in its own process group until the URL answers, at most two minutes; killed on the way out. */
+function command({ command: line, url }) {
+  const child = spawn('sh', ['-c', line], { cwd: root, env, detached: true, stdio: 'ignore' });
+  cleanups.push(() => {
+    try {
+      process.kill(-child.pid, 'SIGTERM');
+    } catch {}
+  });
+  for (let second = 0; second < 120; second += 1) {
+    if (run('curl', ['--silent', '--output', '/dev/null', '--max-time', '2', url], root).status === 0) return url;
+    sleep(1000);
+  }
+  blocked(`Nothing published: ${url} did not answer in two minutes after ${line}.`);
+}

@@ -1,0 +1,7062 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "AiOrchestrator.Server | v1",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/version": {
+      "get": {
+        "tags": [
+          "AiOrchestrator.Server"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/pbi/review/approve": {
+      "post": {
+        "tags": [
+          "Loop"
+        ],
+        "operationId": "ApproveReview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveReviewCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewSubmitted"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi/move": {
+      "post": {
+        "tags": [
+          "Loop"
+        ],
+        "operationId": "MovePbi",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MovePbiCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Line"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/loop/settings": {
+      "get": {
+        "tags": [
+          "Loop"
+        ],
+        "operationId": "ReadEngineSettings",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadEngineSettingsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Loop"
+        ],
+        "operationId": "SaveEngineSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveEngineSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadEngineSettingsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/loop/journal": {
+      "get": {
+        "tags": [
+          "Loop"
+        ],
+        "operationId": "ReadJournal",
+        "parameters": [
+          {
+            "name": "repository",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pbi",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Line"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/loop/definition": {
+      "get": {
+        "tags": [
+          "Loop"
+        ],
+        "operationId": "ReadLoopDefinition",
+        "parameters": [
+          {
+            "name": "repository",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoopShape"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/loop/metrics": {
+      "get": {
+        "tags": [
+          "Loop"
+        ],
+        "operationId": "ReadMetrics",
+        "parameters": [
+          {
+            "name": "repository",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "epic",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsReport"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/loop/present": {
+      "get": {
+        "tags": [
+          "Loop"
+        ],
+        "operationId": "ReadPresent",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadPresentResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/loop/journal/{id}/output": {
+      "get": {
+        "tags": [
+          "Loop"
+        ],
+        "operationId": "ReadScriptOutput",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi/release": {
+      "post": {
+        "tags": [
+          "Loop"
+        ],
+        "operationId": "ReleaseHold",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseHoldCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Line"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi/review/request-changes": {
+      "post": {
+        "tags": [
+          "Loop"
+        ],
+        "operationId": "RequestChanges",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestChangesCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewSubmitted"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi/proposal/request-changes": {
+      "post": {
+        "tags": [
+          "Loop"
+        ],
+        "operationId": "RequestProposalChanges",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestProposalChangesCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewSubmitted"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/loop/run-once": {
+      "post": {
+        "tags": [
+          "Loop"
+        ],
+        "operationId": "RunOnce",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOnceResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/loop/engine": {
+      "put": {
+        "tags": [
+          "Loop"
+        ],
+        "operationId": "SwitchEngine",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SwitchEngineRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwitchEngineResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/loop/validate": {
+      "post": {
+        "tags": [
+          "Loop"
+        ],
+        "operationId": "ValidateLoop",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateLoopRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateLoopResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi/issue/comment": {
+      "post": {
+        "tags": [
+          "Pbis"
+        ],
+        "operationId": "CommentOnIssue",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentOnIssueCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueComment"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi/proposal/comment": {
+      "post": {
+        "tags": [
+          "Pbis"
+        ],
+        "operationId": "CommentOnProposal",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentOnProposalCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalComment"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi/create": {
+      "post": {
+        "tags": [
+          "Pbis"
+        ],
+        "operationId": "CreatePbi",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePbiCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VendorPbi"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi/edit": {
+      "post": {
+        "tags": [
+          "Pbis"
+        ],
+        "operationId": "EditPbiBody",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditPbiBodyCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditedBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbis/done": {
+      "get": {
+        "tags": [
+          "Pbis"
+        ],
+        "operationId": "ListDonePbis",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PbiList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbis": {
+      "get": {
+        "tags": [
+          "Pbis"
+        ],
+        "operationId": "ListVendorPbis",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PbiList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi/children": {
+      "get": {
+        "tags": [
+          "Pbis"
+        ],
+        "operationId": "ReadChildren",
+        "parameters": [
+          {
+            "name": "repository",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IssueChild"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi/issue": {
+      "get": {
+        "tags": [
+          "Pbis"
+        ],
+        "operationId": "ReadIssue",
+        "parameters": [
+          {
+            "name": "repository",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuePage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi": {
+      "get": {
+        "tags": [
+          "Pbis"
+        ],
+        "operationId": "ReadPbi",
+        "parameters": [
+          {
+            "name": "repository",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PbiDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi/proposal": {
+      "get": {
+        "tags": [
+          "Pbis"
+        ],
+        "operationId": "ReadProposal",
+        "parameters": [
+          {
+            "name": "repository",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi/proposal/file": {
+      "get": {
+        "tags": [
+          "Pbis"
+        ],
+        "operationId": "ReadProposalFile",
+        "parameters": [
+          {
+            "name": "repository",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi/recording": {
+      "get": {
+        "tags": [
+          "Pbis"
+        ],
+        "operationId": "ReadRecordingEvidence",
+        "parameters": [
+          {
+            "name": "repository",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi/search": {
+      "get": {
+        "tags": [
+          "Pbis"
+        ],
+        "operationId": "SearchPbis",
+        "parameters": [
+          {
+            "name": "repository",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "text",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VendorPbi"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi/review/comment": {
+      "post": {
+        "tags": [
+          "Pbis"
+        ],
+        "operationId": "CommentOnReview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentOnReviewCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewCommentRow"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi/attachment": {
+      "get": {
+        "tags": [
+          "Pbis"
+        ],
+        "operationId": "ReadAttachment",
+        "parameters": [
+          {
+            "name": "repository",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "url",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi/review/conversation": {
+      "get": {
+        "tags": [
+          "Pbis"
+        ],
+        "operationId": "ReadConversation",
+        "parameters": [
+          {
+            "name": "repository",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationRead"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi/review": {
+      "get": {
+        "tags": [
+          "Pbis"
+        ],
+        "operationId": "ReadReview",
+        "parameters": [
+          {
+            "name": "repository",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewRead"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi/review/reply": {
+      "post": {
+        "tags": [
+          "Pbis"
+        ],
+        "operationId": "ReplyToReview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplyToReviewCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewCommentRow"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi/review/resolve": {
+      "post": {
+        "tags": [
+          "Pbis"
+        ],
+        "operationId": "ResolveReviewThread",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveReviewThreadCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewThreadRow"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi/review/submit": {
+      "post": {
+        "tags": [
+          "Pbis"
+        ],
+        "operationId": "SubmitReview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitReviewCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewWritten"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{runId}/recording": {
+      "get": {
+        "tags": [
+          "Runs"
+        ],
+        "operationId": "GetRecording",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs": {
+      "get": {
+        "tags": [
+          "Runs"
+        ],
+        "operationId": "ListPbiRuns",
+        "parameters": [
+          {
+            "name": "repository",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pbi",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RunRow"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions": {
+      "get": {
+        "tags": [
+          "Runs"
+        ],
+        "operationId": "ListSessions",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LiveSession"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/folders/sessions": {
+      "post": {
+        "tags": [
+          "Runs"
+        ],
+        "operationId": "OpenFolderSession",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenFolderSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenFolderSessionResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbi/sessions": {
+      "post": {
+        "tags": [
+          "Runs"
+        ],
+        "operationId": "OpenPbiSession",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenPbiSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenPbiSessionResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/machine": {
+      "get": {
+        "tags": [
+          "Runs"
+        ],
+        "operationId": "ReadMachine",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Machine"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/settings": {
+      "get": {
+        "tags": [
+          "Runs"
+        ],
+        "operationId": "ReadRunsSettings",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadRunsSettingsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Runs"
+        ],
+        "operationId": "SaveRunsSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveRunsSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadRunsSettingsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/environments": {
+      "get": {
+        "tags": [
+          "Runs"
+        ],
+        "operationId": "ReadStateEnvironments",
+        "parameters": [
+          {
+            "name": "repository",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadStateEnvironmentsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Runs"
+        ],
+        "operationId": "SaveStateEnvironment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveStateEnvironmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadStateEnvironmentsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{runId}/stop": {
+      "post": {
+        "tags": [
+          "Runs"
+        ],
+        "operationId": "StopPbiRun",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/preferences": {
+      "get": {
+        "tags": [
+          "Workspace"
+        ],
+        "operationId": "GetPreferences",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPreferencesResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Workspace"
+        ],
+        "operationId": "SavePreferences",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePreferencesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavePreferencesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/machine/tools": {
+      "get": {
+        "tags": [
+          "Workspace"
+        ],
+        "operationId": "ReadTools",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tools"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/folders/{id}/harness/install": {
+      "post": {
+        "tags": [
+          "Workspace"
+        ],
+        "operationId": "InstallHarness",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Installation"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Workspace"
+        ],
+        "operationId": "ReadHarnessInstall",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallState"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/harness": {
+      "get": {
+        "tags": [
+          "Workspace"
+        ],
+        "operationId": "ReadHarness",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Package"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/folders": {
+      "post": {
+        "tags": [
+          "Workspace"
+        ],
+        "operationId": "AddFolder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddFolderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddFolderResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Workspace"
+        ],
+        "operationId": "ListLoopFolders",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LoopFolderRow"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/folders/{id}/open-in-editor": {
+      "post": {
+        "tags": [
+          "Workspace"
+        ],
+        "operationId": "OpenInEditor",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenInEditorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenInEditorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/directories": {
+      "get": {
+        "tags": [
+          "Workspace"
+        ],
+        "operationId": "ReadDirectories",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryListing"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/folders/{id}": {
+      "get": {
+        "tags": [
+          "Workspace"
+        ],
+        "operationId": "ReadFolderPage",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Workspace"
+        ],
+        "operationId": "RemoveFolder",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/folders/{id}/states": {
+      "get": {
+        "tags": [
+          "Workspace"
+        ],
+        "operationId": "ReadFolderStates",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderStates"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/folders/{id}/defaults": {
+      "put": {
+        "tags": [
+          "Workspace"
+        ],
+        "operationId": "SetFolderDefaults",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetFolderDefaultsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetFolderDefaultsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/content": {
+      "get": {
+        "tags": [
+          "Workspace"
+        ],
+        "operationId": "ReadPbiFile",
+        "parameters": [
+          {
+            "name": "folderId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "pbi",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "asIs",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadPbiFileResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Workspace"
+        ],
+        "operationId": "SavePbiFile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePbiFileCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PbiFiles"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files": {
+      "get": {
+        "tags": [
+          "Workspace"
+        ],
+        "operationId": "ReadPbiFiles",
+        "parameters": [
+          {
+            "name": "folderId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "pbi",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "asIs",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PbiFiles"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/console/stop": {
+      "post": {
+        "tags": [
+          "Console"
+        ],
+        "operationId": "StopConsole",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleStop"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/updates": {
+      "get": {
+        "tags": [
+          "Updates"
+        ],
+        "operationId": "ReadUpdates",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/updates/check": {
+      "post": {
+        "tags": [
+          "Updates"
+        ],
+        "operationId": "CheckForUpdates",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/updates/install": {
+      "post": {
+        "tags": [
+          "Updates"
+        ],
+        "operationId": "InstallUpdate",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateInstall"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/app/service": {
+      "get": {
+        "tags": [
+          "Updates"
+        ],
+        "operationId": "ReadStartAtLogin",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartAtLogin"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Updates"
+        ],
+        "operationId": "SetStartAtLogin",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartAtLoginChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartAtLogin"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AddFolderRequest": {
+        "required": [
+          "path",
+          "defaultAgentId"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "defaultAgentId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AddFolderResponse": {
+        "required": [
+          "id",
+          "name",
+          "path",
+          "branch"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          }
+        }
+      },
+      "ApproveReviewCommand": {
+        "required": [
+          "repository",
+          "id",
+          "body"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "body": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "Choice": {
+        "required": [
+          "state",
+          "environment"
+        ],
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string"
+          },
+          "environment": {
+            "type": "string"
+          }
+        }
+      },
+      "CommentOnIssueCommand": {
+        "required": [
+          "repository",
+          "id",
+          "body",
+          "attachments"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "attachments": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/IssueAttachment"
+            }
+          }
+        }
+      },
+      "CommentOnProposalCommand": {
+        "required": [
+          "repository",
+          "id",
+          "path",
+          "line",
+          "body"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "body": {
+            "type": "string"
+          }
+        }
+      },
+      "CommentOnReviewCommand": {
+        "required": [
+          "repository",
+          "id",
+          "path",
+          "line",
+          "body"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "body": {
+            "type": "string"
+          }
+        }
+      },
+      "ConsoleStop": {
+        "required": [
+          "stopping"
+        ],
+        "type": "object",
+        "properties": {
+          "stopping": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ConversationRead": {
+        "required": [
+          "pullRequest",
+          "title",
+          "state",
+          "author",
+          "body",
+          "comments",
+          "reviews"
+        ],
+        "type": "object",
+        "properties": {
+          "pullRequest": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/VendorPullRequest"
+              }
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "author": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "body": {
+            "type": "string"
+          },
+          "comments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewCommentRow"
+            }
+          },
+          "reviews": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewNote"
+            }
+          }
+        }
+      },
+      "CreatePbiCommand": {
+        "required": [
+          "repository",
+          "title",
+          "body",
+          "parent"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "DirectoryEntry": {
+        "required": [
+          "name",
+          "path",
+          "isGitRepository"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "isGitRepository": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DirectoryListing": {
+        "required": [
+          "path",
+          "parent",
+          "directories"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "parent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "directories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DirectoryEntry"
+            }
+          }
+        }
+      },
+      "EditedBody": {
+        "required": [
+          "repository",
+          "id",
+          "body"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          }
+        }
+      },
+      "EditPbiBodyCommand": {
+        "required": [
+          "repository",
+          "id",
+          "body"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          }
+        }
+      },
+      "EngineFolder": {
+        "required": [
+          "path",
+          "vendor",
+          "repository",
+          "on",
+          "wip",
+          "problem"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "vendor": {
+            "type": "string"
+          },
+          "repository": {
+            "type": "string"
+          },
+          "on": {
+            "type": "boolean"
+          },
+          "wip": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "problem": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "EnginePass": {
+        "required": [
+          "at",
+          "folders",
+          "pbis",
+          "skipped",
+          "written",
+          "failure"
+        ],
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "folders": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pbis": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "written": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "failure": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "EngineRun": {
+        "required": [
+          "runId",
+          "repository",
+          "pbi",
+          "state",
+          "lastOutputAt",
+          "stale"
+        ],
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "repository": {
+            "type": "string"
+          },
+          "pbi": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "lastOutputAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "stale": {
+            "type": "boolean"
+          }
+        }
+      },
+      "EngineScript": {
+        "required": [
+          "repository",
+          "pbi",
+          "state",
+          "script",
+          "since",
+          "stale"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "pbi": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "script": {
+            "type": "string"
+          },
+          "since": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "stale": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Entry": {
+        "required": [
+          "path",
+          "executable",
+          "target"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "executable": {
+            "type": "boolean"
+          },
+          "target": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "EnvironmentNote": {
+        "required": [
+          "environment",
+          "offered",
+          "note",
+          "remedy"
+        ],
+        "type": "object",
+        "properties": {
+          "environment": {
+            "type": "string"
+          },
+          "offered": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string"
+          },
+          "remedy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "EvidenceCapture": {
+        "required": [
+          "name",
+          "url",
+          "screen",
+          "width",
+          "height",
+          "theme"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "screen": {
+            "type": "string"
+          },
+          "width": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "height": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "theme": {
+            "type": "string"
+          }
+        }
+      },
+      "FolderHarnessFile": {
+        "required": [
+          "path",
+          "present",
+          "stub"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "present": {
+            "type": "boolean"
+          },
+          "stub": {
+            "type": "boolean"
+          }
+        }
+      },
+      "FolderPage": {
+        "required": [
+          "id",
+          "name",
+          "path",
+          "vendor",
+          "repository",
+          "branch",
+          "defaultAgent",
+          "defaultModel",
+          "loopYaml",
+          "harnessVersion",
+          "shippedVersion",
+          "harness",
+          "trust"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "vendor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "repository": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "branch": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "defaultAgent": {
+            "type": "string"
+          },
+          "defaultModel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "loopYaml": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "harnessVersion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "shippedVersion": {
+            "type": "string"
+          },
+          "harness": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FolderHarnessFile"
+            }
+          },
+          "trust": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FolderTrust"
+            }
+          }
+        }
+      },
+      "FolderStates": {
+        "required": [
+          "vendor",
+          "states",
+          "problem"
+        ],
+        "type": "object",
+        "properties": {
+          "vendor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "states": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "problem": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "FolderSwitch": {
+        "required": [
+          "path",
+          "repository",
+          "on"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "repository": {
+            "type": "string"
+          },
+          "on": {
+            "type": "boolean"
+          }
+        }
+      },
+      "FolderTrust": {
+        "required": [
+          "provider",
+          "trusted",
+          "why",
+          "remedy"
+        ],
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "trusted": {
+            "type": "boolean"
+          },
+          "why": {
+            "type": "string"
+          },
+          "remedy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "GetPreferencesResponse": {
+        "required": [
+          "editor",
+          "requirementsSeen"
+        ],
+        "type": "object",
+        "properties": {
+          "editor": {
+            "type": "string"
+          },
+          "requirementsSeen": {
+            "type": "boolean"
+          }
+        }
+      },
+      "HttpValidationProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "errors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "Installation": {
+        "required": [
+          "version",
+          "branch",
+          "base",
+          "pullRequest",
+          "alreadyOpen",
+          "states",
+          "kept",
+          "problems"
+        ],
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "base": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pullRequest": {
+            "$ref": "#/components/schemas/InstallPullRequest"
+          },
+          "alreadyOpen": {
+            "type": "boolean"
+          },
+          "states": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "kept": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "InstallPullRequest": {
+        "required": [
+          "id",
+          "url"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      },
+      "InstallState": {
+        "required": [
+          "branch",
+          "pullRequest",
+          "problem"
+        ],
+        "type": "object",
+        "properties": {
+          "branch": {
+            "type": "string"
+          },
+          "pullRequest": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/InstallPullRequest"
+              }
+            ]
+          },
+          "problem": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "IssueAttachment": {
+        "required": [
+          "name",
+          "base64"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "base64": {
+            "type": "string"
+          }
+        }
+      },
+      "IssueChild": {
+        "required": [
+          "repository",
+          "id",
+          "title",
+          "state",
+          "held",
+          "closed"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "state": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "held": {
+            "type": "boolean"
+          },
+          "closed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "IssueComment": {
+        "required": [
+          "id",
+          "author",
+          "createdAt",
+          "body",
+          "url",
+          "harness"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "author": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "body": {
+            "type": "string"
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "harness": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "IssueImage": {
+        "required": [
+          "url",
+          "name",
+          "commentId"
+        ],
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "commentId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "IssueLink": {
+        "required": [
+          "repository",
+          "id",
+          "title",
+          "url",
+          "closed"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "closed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "IssuePage": {
+        "required": [
+          "url",
+          "author",
+          "createdAt",
+          "body",
+          "labels",
+          "assignees",
+          "parent",
+          "blockedBy",
+          "comments",
+          "images"
+        ],
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "author": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "body": {
+            "type": "string"
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "assignees": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "parent": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/IssueLink"
+              }
+            ]
+          },
+          "blockedBy": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueLink"
+            }
+          },
+          "comments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueComment"
+            }
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueImage"
+            }
+          }
+        }
+      },
+      "Line": {
+        "required": [
+          "id",
+          "at",
+          "repository",
+          "pbi",
+          "from",
+          "kind",
+          "to",
+          "why",
+          "output"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "repository": {
+            "type": "string"
+          },
+          "pbi": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "to": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "why": {
+            "type": "string"
+          },
+          "output": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "LiveSession": {
+        "required": [
+          "runId",
+          "repository",
+          "pbi",
+          "state",
+          "manual",
+          "provider",
+          "command",
+          "startedAt",
+          "lastOutputAt",
+          "stale",
+          "folderPath"
+        ],
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "repository": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pbi": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "state": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "manual": {
+            "type": "boolean"
+          },
+          "provider": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "command": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastOutputAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "folderPath": {
+            "type": "string"
+          }
+        }
+      },
+      "LoopAgentRow": {
+        "required": [
+          "role",
+          "provider",
+          "model"
+        ],
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "LoopFolderRow": {
+        "required": [
+          "id",
+          "name",
+          "path",
+          "vendor",
+          "repository",
+          "loopYaml",
+          "defaultAgent",
+          "defaultModel",
+          "hasGate"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "vendor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "repository": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "loopYaml": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "defaultAgent": {
+            "type": "string"
+          },
+          "defaultModel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hasGate": {
+            "type": "boolean"
+          }
+        }
+      },
+      "LoopShape": {
+        "required": [
+          "name",
+          "agents",
+          "states",
+          "undeclared",
+          "problem"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LoopAgentRow"
+            }
+          },
+          "states": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LoopStateRow"
+            }
+          },
+          "undeclared": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "problem": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "LoopStateRow": {
+        "required": [
+          "name",
+          "scripts",
+          "agent",
+          "command",
+          "score",
+          "provider",
+          "model",
+          "maxLoops",
+          "transitions",
+          "back",
+          "tab"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "scripts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "agent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "command": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "score": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "provider": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "maxLoops": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "transitions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LoopTransitionRow"
+            }
+          },
+          "back": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tab": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "LoopTransitionRow": {
+        "required": [
+          "outcome",
+          "target",
+          "hold"
+        ],
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "target": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hold": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "Machine": {
+        "required": [
+          "agents",
+          "environments",
+          "defaultEnvironment",
+          "notes"
+        ],
+        "type": "object",
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "environments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaultEnvironment": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EnvironmentNote"
+            }
+          }
+        }
+      },
+      "MetricsAgents": {
+        "required": [
+          "steps",
+          "runs"
+        ],
+        "type": "object",
+        "properties": {
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricsStep"
+            }
+          },
+          "runs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricsRun"
+            }
+          }
+        }
+      },
+      "MetricsDecisionPoint": {
+        "required": [
+          "state",
+          "tab",
+          "asIs",
+          "afterChanges",
+          "withoutPerson"
+        ],
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string"
+          },
+          "tab": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "asIs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "afterChanges": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "withoutPerson": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "MetricsEpicFlow": {
+        "required": [
+          "id",
+          "title",
+          "pbis",
+          "started",
+          "closed",
+          "seconds"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "pbis": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "started": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "closed": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "seconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "MetricsFlow": {
+        "required": [
+          "done",
+          "p50Seconds",
+          "p75Seconds",
+          "p90Seconds",
+          "epics",
+          "rework",
+          "weeks"
+        ],
+        "type": "object",
+        "properties": {
+          "done": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "p50Seconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "p75Seconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "p90Seconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "epics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricsEpicFlow"
+            }
+          },
+          "rework": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricsRework"
+            }
+          },
+          "weeks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricsWeek"
+            }
+          }
+        }
+      },
+      "MetricsHoldReason": {
+        "required": [
+          "reason",
+          "unchanged",
+          "afterCommit",
+          "returned",
+          "closed",
+          "open",
+          "medianSeconds",
+          "maxSeconds",
+          "alwaysUnchanged"
+        ],
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "unchanged": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "afterCommit": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "returned": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "closed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "open": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "medianSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "maxSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "alwaysUnchanged": {
+            "type": "boolean"
+          }
+        }
+      },
+      "MetricsNote": {
+        "required": [
+          "kind",
+          "count",
+          "pbis",
+          "runs",
+          "at",
+          "detail"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pbis": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "runs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "at": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "MetricsPbi": {
+        "required": [
+          "id",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "MetricsPeople": {
+        "required": [
+          "holds",
+          "decisions",
+          "mergedWithPerson",
+          "mergedAgentOnly"
+        ],
+        "type": "object",
+        "properties": {
+          "holds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricsHoldReason"
+            }
+          },
+          "decisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricsDecisionPoint"
+            }
+          },
+          "mergedWithPerson": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "mergedAgentOnly": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "MetricsReport": {
+        "required": [
+          "repository",
+          "from",
+          "to",
+          "epic",
+          "epics",
+          "pbis",
+          "agents",
+          "people",
+          "flow",
+          "notes"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "from": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "epic": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "epics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricsPbi"
+            }
+          },
+          "pbis": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricsPbi"
+            }
+          },
+          "agents": {
+            "$ref": "#/components/schemas/MetricsAgents"
+          },
+          "people": {
+            "$ref": "#/components/schemas/MetricsPeople"
+          },
+          "flow": {
+            "$ref": "#/components/schemas/MetricsFlow"
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricsNote"
+            }
+          }
+        }
+      },
+      "MetricsRework": {
+        "required": [
+          "pbi",
+          "rounds"
+        ],
+        "type": "object",
+        "properties": {
+          "pbi": {
+            "type": "string"
+          },
+          "rounds": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "MetricsRun": {
+        "required": [
+          "runId",
+          "state",
+          "pbi",
+          "startedAt",
+          "seconds",
+          "result",
+          "succeeded",
+          "costUsd",
+          "tokens"
+        ],
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "type": "string"
+          },
+          "pbi": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "seconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "result": {
+            "type": "string"
+          },
+          "succeeded": {
+            "type": "boolean"
+          },
+          "costUsd": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "tokens": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "MetricsStep": {
+        "required": [
+          "state",
+          "command",
+          "runs",
+          "succeeded",
+          "medianSeconds",
+          "p90Seconds",
+          "costUsd",
+          "tokens",
+          "costPerRun",
+          "tokensPerRun"
+        ],
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string"
+          },
+          "command": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "runs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "succeeded": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "medianSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "p90Seconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "costUsd": {
+            "type": "number",
+            "format": "double"
+          },
+          "tokens": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "costPerRun": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "tokensPerRun": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "MetricsWeek": {
+        "required": [
+          "week",
+          "pbis"
+        ],
+        "type": "object",
+        "properties": {
+          "week": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "pbis": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "MovePbiCommand": {
+        "required": [
+          "repository",
+          "id",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        }
+      },
+      "OpenFolderSessionRequest": {
+        "required": [
+          "path",
+          "provider",
+          "model",
+          "command"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "provider": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "command": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "OpenFolderSessionResponse": {
+        "required": [
+          "runId"
+        ],
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "OpenInEditorRequest": {
+        "required": [
+          "file"
+        ],
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pbi": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "asIs": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        }
+      },
+      "OpenInEditorResponse": {
+        "required": [
+          "opened",
+          "editor"
+        ],
+        "type": "object",
+        "properties": {
+          "opened": {
+            "type": "string"
+          },
+          "editor": {
+            "type": "string"
+          }
+        }
+      },
+      "OpenPbiSessionRequest": {
+        "required": [
+          "repository",
+          "id",
+          "provider",
+          "model",
+          "command"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "provider": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "command": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "OpenPbiSessionResponse": {
+        "required": [
+          "runId"
+        ],
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "Package": {
+        "required": [
+          "version",
+          "files"
+        ],
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Entry"
+            }
+          }
+        }
+      },
+      "PbiDetail": {
+        "required": [
+          "pbi",
+          "pullRequest"
+        ],
+        "type": "object",
+        "properties": {
+          "pbi": {
+            "$ref": "#/components/schemas/VendorPbi"
+          },
+          "pullRequest": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/VendorPullRequest"
+              }
+            ]
+          }
+        }
+      },
+      "PbiFiles": {
+        "required": [
+          "branch",
+          "exists",
+          "checkout",
+          "inWorktree",
+          "files",
+          "modified",
+          "truncated"
+        ],
+        "type": "object",
+        "properties": {
+          "branch": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "exists": {
+            "type": "boolean"
+          },
+          "checkout": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inWorktree": {
+            "type": "boolean"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "modified": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PbiList": {
+        "required": [
+          "pbis",
+          "unread"
+        ],
+        "type": "object",
+        "properties": {
+          "pbis": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VendorPbi"
+            }
+          },
+          "unread": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UnreadFolder"
+            }
+          }
+        }
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ProposalComment": {
+        "required": [
+          "id",
+          "path",
+          "line",
+          "author",
+          "createdAt",
+          "body"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "line": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "author": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "body": {
+            "type": "string"
+          }
+        }
+      },
+      "ProposalDelta": {
+        "required": [
+          "added",
+          "modified",
+          "removed",
+          "renamed"
+        ],
+        "type": "object",
+        "properties": {
+          "added": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "modified": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "removed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "renamed": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ProposalFile": {
+        "required": [
+          "path",
+          "name",
+          "kind",
+          "text",
+          "capability",
+          "master",
+          "delta",
+          "tasks"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "text": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "capability": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "master": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "delta": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProposalDelta"
+              }
+            ]
+          },
+          "tasks": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProposalTasks"
+              }
+            ]
+          }
+        }
+      },
+      "ProposalPage": {
+        "required": [
+          "pullRequestId",
+          "pullRequestUrl",
+          "head",
+          "change",
+          "root",
+          "missing",
+          "files",
+          "comments",
+          "plan",
+          "earlierPlans"
+        ],
+        "type": "object",
+        "properties": {
+          "pullRequestId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pullRequestUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "head": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "change": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "root": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "missing": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProposalFile"
+            }
+          },
+          "comments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProposalComment"
+            }
+          },
+          "plan": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProposalPlan"
+              }
+            ]
+          },
+          "earlierPlans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProposalPlan"
+            }
+          }
+        }
+      },
+      "ProposalPlan": {
+        "required": [
+          "id",
+          "author",
+          "createdAt",
+          "body",
+          "url",
+          "images"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "author": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "body": {
+            "type": "string"
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ProposalTasks": {
+        "required": [
+          "done",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "done": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "QualityRow": {
+        "required": [
+          "check",
+          "measured",
+          "line",
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "check": {
+            "type": "string"
+          },
+          "measured": {
+            "type": "string"
+          },
+          "line": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          }
+        }
+      },
+      "ReadEngineSettingsResponse": {
+        "required": [
+          "intervalSeconds",
+          "folders"
+        ],
+        "type": "object",
+        "properties": {
+          "intervalSeconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "folders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FolderSwitch"
+            }
+          }
+        }
+      },
+      "ReadPbiFileResponse": {
+        "required": [
+          "path",
+          "text",
+          "isBinary",
+          "truncated",
+          "bytes"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "isBinary": {
+            "type": "boolean"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ReadPresentResponse": {
+        "required": [
+          "enabled",
+          "intervalSeconds",
+          "lastPass",
+          "nextPassAt",
+          "liveRuns",
+          "liveScripts",
+          "folders",
+          "lastDecision"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "intervalSeconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "lastPass": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EnginePass"
+              }
+            ]
+          },
+          "nextPassAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "liveRuns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EngineRun"
+            }
+          },
+          "liveScripts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EngineScript"
+            }
+          },
+          "folders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EngineFolder"
+            }
+          },
+          "lastDecision": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Line"
+              }
+            ]
+          }
+        }
+      },
+      "ReadRunsSettingsResponse": {
+        "required": [
+          "staleAfterSeconds",
+          "permissionMode"
+        ],
+        "type": "object",
+        "properties": {
+          "staleAfterSeconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "permissionMode": {
+            "type": "string"
+          }
+        }
+      },
+      "ReadStateEnvironmentsResponse": {
+        "required": [
+          "repository",
+          "states"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "states": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Choice"
+            }
+          }
+        }
+      },
+      "ReleaseHoldCommand": {
+        "required": [
+          "repository",
+          "id",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "to": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ReplyToReviewCommand": {
+        "required": [
+          "repository",
+          "id",
+          "commentId",
+          "body"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "commentId": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          }
+        }
+      },
+      "RequestChangesCommand": {
+        "required": [
+          "repository",
+          "id",
+          "body"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          }
+        }
+      },
+      "RequestProposalChangesCommand": {
+        "required": [
+          "repository",
+          "id",
+          "body"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          }
+        }
+      },
+      "Requirement": {
+        "required": [
+          "name",
+          "state",
+          "required",
+          "agent",
+          "version",
+          "account",
+          "problem",
+          "command",
+          "link"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "agent": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "problem": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "command": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "link": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ResolveReviewThreadCommand": {
+        "required": [
+          "repository",
+          "id",
+          "threadId"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        }
+      },
+      "ReviewChange": {
+        "required": [
+          "baseRef",
+          "baseSha",
+          "headRef",
+          "headSha",
+          "commits",
+          "additions",
+          "deletions",
+          "changedFiles",
+          "files"
+        ],
+        "type": "object",
+        "properties": {
+          "baseRef": {
+            "type": "string"
+          },
+          "baseSha": {
+            "type": "string"
+          },
+          "headRef": {
+            "type": "string"
+          },
+          "headSha": {
+            "type": "string"
+          },
+          "commits": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "additions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "deletions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "changedFiles": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewFile"
+            }
+          }
+        }
+      },
+      "ReviewCheck": {
+        "required": [
+          "name",
+          "state",
+          "url"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ReviewChecks": {
+        "required": [
+          "rows",
+          "problem"
+        ],
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewCheck"
+            }
+          },
+          "problem": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ReviewCommentRow": {
+        "required": [
+          "id",
+          "author",
+          "at",
+          "body"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "author": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "body": {
+            "type": "string"
+          }
+        }
+      },
+      "ReviewEvidence": {
+        "required": [
+          "headSha",
+          "author",
+          "at",
+          "captures",
+          "problem"
+        ],
+        "type": "object",
+        "properties": {
+          "headSha": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "author": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "at": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "captures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EvidenceCapture"
+            }
+          },
+          "problem": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ReviewFile": {
+        "required": [
+          "path",
+          "previousPath",
+          "status",
+          "additions",
+          "deletions",
+          "patch"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "previousPath": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "additions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "deletions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "patch": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ReviewNote": {
+        "required": [
+          "id",
+          "verdict",
+          "author",
+          "at",
+          "body"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "verdict": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "author": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "body": {
+            "type": "string"
+          }
+        }
+      },
+      "ReviewQuality": {
+        "required": [
+          "headSha",
+          "stale",
+          "author",
+          "at",
+          "rows",
+          "problem"
+        ],
+        "type": "object",
+        "properties": {
+          "headSha": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "author": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "at": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QualityRow"
+            }
+          },
+          "problem": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ReviewRead": {
+        "required": [
+          "pullRequest",
+          "change",
+          "threads",
+          "checks",
+          "quality",
+          "evidence"
+        ],
+        "type": "object",
+        "properties": {
+          "pullRequest": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/VendorPullRequest"
+              }
+            ]
+          },
+          "change": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ReviewChange"
+              }
+            ]
+          },
+          "threads": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewThreadRow"
+            }
+          },
+          "checks": {
+            "$ref": "#/components/schemas/ReviewChecks"
+          },
+          "quality": {
+            "$ref": "#/components/schemas/ReviewQuality"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/ReviewEvidence"
+          }
+        }
+      },
+      "ReviewSubmitted": {
+        "required": [
+          "review",
+          "line",
+          "unmoved",
+          "note",
+          "asComment"
+        ],
+        "type": "object",
+        "properties": {
+          "review": {
+            "type": "string"
+          },
+          "line": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Line"
+              }
+            ]
+          },
+          "unmoved": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "asComment": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ReviewThreadRow": {
+        "required": [
+          "id",
+          "path",
+          "line",
+          "isResolved",
+          "isOutdated",
+          "comments"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "line": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "isResolved": {
+            "type": "boolean"
+          },
+          "isOutdated": {
+            "type": "boolean"
+          },
+          "comments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewCommentRow"
+            }
+          }
+        }
+      },
+      "ReviewWritten": {
+        "required": [
+          "id",
+          "verdict",
+          "author",
+          "body",
+          "asComment"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "verdict": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "author": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "body": {
+            "type": "string"
+          },
+          "asComment": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "RunOnceResponse": {
+        "required": [
+          "folders",
+          "pbis",
+          "skipped",
+          "written"
+        ],
+        "type": "object",
+        "properties": {
+          "folders": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pbis": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "written": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Line"
+            }
+          }
+        }
+      },
+      "RunRow": {
+        "required": [
+          "runId",
+          "state",
+          "manual",
+          "provider",
+          "model",
+          "command",
+          "startedAt",
+          "endedAt",
+          "lastOutputAt",
+          "stale",
+          "outcome",
+          "reason",
+          "failure",
+          "problems",
+          "endRecord",
+          "inputTokens",
+          "outputTokens",
+          "costUsd",
+          "recordingPath",
+          "recorded"
+        ],
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "type": "string"
+          },
+          "manual": {
+            "type": "boolean"
+          },
+          "provider": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "command": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "lastOutputAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "outcome": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "failure": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "endRecord": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inputTokens": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int64"
+          },
+          "outputTokens": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int64"
+          },
+          "costUsd": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "recordingPath": {
+            "type": "string"
+          },
+          "recorded": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SaveEngineSettingsRequest": {
+        "required": [
+          "intervalSeconds"
+        ],
+        "type": "object",
+        "properties": {
+          "intervalSeconds": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "SavePbiFileCommand": {
+        "required": [
+          "folderId",
+          "pbi",
+          "asIs",
+          "path",
+          "text"
+        ],
+        "type": "object",
+        "properties": {
+          "folderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pbi": {
+            "type": "string"
+          },
+          "asIs": {
+            "type": "boolean"
+          },
+          "path": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "SavePreferencesRequest": {
+        "required": [
+          "editor",
+          "requirementsSeen"
+        ],
+        "type": "object",
+        "properties": {
+          "editor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "requirementsSeen": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        }
+      },
+      "SavePreferencesResponse": {
+        "required": [
+          "editor",
+          "requirementsSeen"
+        ],
+        "type": "object",
+        "properties": {
+          "editor": {
+            "type": "string"
+          },
+          "requirementsSeen": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SaveRunsSettingsRequest": {
+        "type": "object",
+        "properties": {
+          "staleAfterSeconds": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "permissionMode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "SaveStateEnvironmentRequest": {
+        "required": [
+          "repository",
+          "state",
+          "environment"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "environment": {
+            "type": "string"
+          }
+        }
+      },
+      "SetFolderDefaultsRequest": {
+        "required": [
+          "agent",
+          "model"
+        ],
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "SetFolderDefaultsResponse": {
+        "required": [
+          "id",
+          "defaultAgent",
+          "defaultModel"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "defaultAgent": {
+            "type": "string"
+          },
+          "defaultModel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "StartAtLogin": {
+        "required": [
+          "how",
+          "supported",
+          "registered"
+        ],
+        "type": "object",
+        "properties": {
+          "how": {
+            "type": "string"
+          },
+          "supported": {
+            "type": "boolean"
+          },
+          "registered": {
+            "type": "boolean"
+          }
+        }
+      },
+      "StartAtLoginChange": {
+        "required": [
+          "registered"
+        ],
+        "type": "object",
+        "properties": {
+          "registered": {
+            "type": "boolean"
+          }
+        }
+      },
+      "State": {
+        "required": [
+          "name",
+          "transitions",
+          "agent"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "transitions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Transition"
+            }
+          },
+          "agent": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SubmitReviewCommand": {
+        "required": [
+          "repository",
+          "id",
+          "verdict",
+          "body"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "verdict": {
+            "type": "string"
+          },
+          "body": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "SwitchEngineRequest": {
+        "required": [
+          "repository",
+          "on"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "on": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SwitchEngineResponse": {
+        "required": [
+          "repository",
+          "on",
+          "written"
+        ],
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "on": {
+            "type": "boolean"
+          },
+          "written": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Line"
+              }
+            ]
+          }
+        }
+      },
+      "Tool": {
+        "required": [
+          "adapter",
+          "cli",
+          "path",
+          "version",
+          "account",
+          "problem",
+          "models"
+        ],
+        "type": "object",
+        "properties": {
+          "adapter": {
+            "type": "string"
+          },
+          "cli": {
+            "type": "string"
+          },
+          "path": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "version": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "problem": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Tools": {
+        "required": [
+          "vendors",
+          "agents",
+          "requirements",
+          "ready"
+        ],
+        "type": "object",
+        "properties": {
+          "vendors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tool"
+            }
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tool"
+            }
+          },
+          "requirements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Requirement"
+            }
+          },
+          "ready": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Transition": {
+        "required": [
+          "outcome",
+          "target",
+          "hold"
+        ],
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "target": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hold": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "UnreadFolder": {
+        "required": [
+          "folderPath",
+          "repository",
+          "why"
+        ],
+        "type": "object",
+        "properties": {
+          "folderPath": {
+            "type": "string"
+          },
+          "repository": {
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateAnswer": {
+        "required": [
+          "state",
+          "installed",
+          "latest",
+          "how",
+          "detail"
+        ],
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string"
+          },
+          "installed": {
+            "type": "string"
+          },
+          "latest": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "how": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "UpdateInstall": {
+        "required": [
+          "succeeded",
+          "output"
+        ],
+        "type": "object",
+        "properties": {
+          "succeeded": {
+            "type": "boolean"
+          },
+          "output": {
+            "type": "string"
+          }
+        }
+      },
+      "ValidateLoopRequest": {
+        "required": [
+          "yaml"
+        ],
+        "type": "object",
+        "properties": {
+          "yaml": {
+            "type": "string"
+          }
+        }
+      },
+      "ValidateLoopResponse": {
+        "required": [
+          "valid",
+          "states",
+          "undeclared",
+          "problems",
+          "providers"
+        ],
+        "type": "object",
+        "properties": {
+          "valid": {
+            "type": "boolean"
+          },
+          "states": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/State"
+            }
+          },
+          "undeclared": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "providers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "VendorPbi": {
+        "required": [
+          "vendor",
+          "repository",
+          "id",
+          "title",
+          "state",
+          "held",
+          "assignee",
+          "closed",
+          "folderPath"
+        ],
+        "type": "object",
+        "properties": {
+          "vendor": {
+            "type": "string"
+          },
+          "repository": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "state": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "held": {
+            "type": "boolean"
+          },
+          "assignee": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "closed": {
+            "type": "boolean"
+          },
+          "folderPath": {
+            "type": "string"
+          }
+        }
+      },
+      "VendorPullRequest": {
+        "required": [
+          "id",
+          "url",
+          "isDraft",
+          "isMerged",
+          "isApproved",
+          "isClosed"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "isDraft": {
+            "type": "boolean"
+          },
+          "isMerged": {
+            "type": "boolean"
+          },
+          "isApproved": {
+            "type": "boolean"
+          },
+          "isClosed": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "AiOrchestrator.Server"
+    },
+    {
+      "name": "Loop"
+    },
+    {
+      "name": "Pbis"
+    },
+    {
+      "name": "Runs"
+    },
+    {
+      "name": "Workspace"
+    },
+    {
+      "name": "Console"
+    },
+    {
+      "name": "Updates"
+    }
+  ]
+}

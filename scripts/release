@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+# The release step. Packs the .NET tool aio, pushes it to a NuGet feed, then tags v<Version> with a
+# GitHub release of notes, stopping at the first step that fails. It answers
+# one JSON line: {published, version, feed, tag, release, observed, why}. Nothing retries, and
+# nothing rewrites: nuget.org never replaces a version, and a tag that exists is never moved.
+#
+#   scripts/release [--source <url-or-folder>] [--no-tag] [commitish]
+#
+# - The version is read from src/Directory.Build.props at the commit named (default: the local
+#   master), the single source (read-product-version). The tag is v<Version> on that commit.
+# - --source defaults to nuget.org (https://api.nuget.org/v3/index.json). A folder works too:
+#   `--source ./artifacts/feed --no-tag` tries the whole step without publishing anything.
+# - The key: NUGET_API_KEY from the environment, or the credential NuGet already stores for the
+#   source when it is unset. It is never in the repository, and never in any line this prints: every
+#   output that passes through is stripped of it.
+# - The tag follows the push: nuget.org lists a version 15 to 30 minutes after it accepts it, and
+#   nothing waits for that (#724). The feed is read once, before packing.
+# - A version already in the feed is not packed or pushed again. Its tag is still made when origin
+#   lacks it, so a run that stopped before tagging is finished by running it again (#711).
+# - A tag v<Version> already on the commit is done; one on another commit stops the step, unmoved.
+# - The notes are gathered, not written: every pull request title between the previous tag and this
+#   commit, as the squash-merges on master name them.
+# - A person runs this after raising the version and merging that (#652). The harness package does
+#   not carry it.
+set -uo pipefail
+export GH_PAGER=cat GH_PROMPT_DISABLED=1 GIT_TERMINAL_PROMPT=0
+
+source_="https://api.nuget.org/v3/index.json"
+tag_it=true
+commitish=master
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --source) source_="${2:-}"; shift 2 ;;
+    --no-tag) tag_it=false; shift ;;
+    *) commitish="$1"; shift ;;
+  esac
+done
+
+key="${NUGET_API_KEY:-}"
+# Whatever a tool said, without the key in it.
+redact() { if [ -n "$key" ]; then sed "s|$(printf '%s' "$key" | sed 's/[][\.*^$|/]/\\&/g')|***|g"; else cat; fi; }
+
+json() { # json <text|null>: a quoted, one-line JSON string, or null
+  [ "$1" = null ] && { printf 'null'; return; }
+  printf '"%s"' "$(printf '%s' "$1" | redact | tr '\n"\\' "  '" | sed 's/  */ /g; s/ $//')"
+}
+
+say() { # say <published> <tag|null> <release url|null> <observed> <why>
+  printf '{"published": %s, "version": %s, "feed": %s, "tag": %s, "release": %s, "observed": %s, "why": %s}\n' \
+    "$1" "$(json "${version:-null}")" "$(json "$source_")" "$(json "$2")" "$(json "$3")" "$4" "$(json "$5")"
+}
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo="$(cd "$here/.." && pwd)"
+
+[ -n "$source_" ] || { say false null null false "release: --source names nothing. Nothing was published."; exit 1; }
+remote=false
+case "$source_" in
+  http://*|https://*) remote=true ;;
+  *) mkdir -p "$source_" && source_="$(cd "$source_" && pwd)" ;;
+esac
+
+commit=$(git -C "$repo" rev-parse --verify --quiet "$commitish^{commit}") || {
+  say false null null false "release: '$commitish' names no commit here. Nothing was published."
+  exit 1
+}
+
+# The version from the commit being tagged, not from the working copy (#462).
+props_dir=$(mktemp -d)
+trap 'rm -rf "$props_dir"' EXIT
+git -C "$repo" show "$commit:src/Directory.Build.props" >"$props_dir/Directory.Build.props" 2>/dev/null || true
+read_version=$(dotnet msbuild "$props_dir/Directory.Build.props" -getProperty:Version 2>/dev/null | tail -1)
+if ! [[ "$read_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  say false null null false "release: Directory.Build.props at $(git -C "$repo" rev-parse --short "$commit") carries no semver Version (read: '$read_version'). Nothing was published."
+  exit 1
+fi
+version="$read_version"
+tag="v$version"
+
+# Whether the feed lists the version, asked once before packing: the folder holds the package (flat or id/version), or the
+# feed's flat container (PackageBaseAddress in its service index) lists it under aio/index.json.
+in_feed() {
+  if [ "$remote" = false ]; then
+    [ -f "$source_/aio.$version.nupkg" ] || [ -f "$source_/aio/$version/aio.$version.nupkg" ]
+    return
+  fi
+  local base
+  base=$(curl -fsSL "$source_" 2>/dev/null | jq -r '[.resources[] | select(."@type" == "PackageBaseAddress/3.0.0") | ."@id"][0] // empty' 2>/dev/null)
+  [ -n "$base" ] || return 1
+  curl -fsSL "${base%/}/aio/index.json" 2>/dev/null | jq -e --arg v "$version" '.versions | index($v)' >/dev/null 2>&1
+}
+
+published=true
+lead="aio $version is in the feed"
+if in_feed; then
+  if [ "$tag_it" = false ]; then
+    say false null null true "aio $version is already in the feed, which never replaces a version. Nothing was packed, pushed or tagged."
+    exit 0
+  fi
+  published=false
+fi
+
+if [ "$published" = true ]; then
+  # 1. Pack, into a file rather than a pipe: the build servers dotnet pack leaves running inherit its
+  # output and would hold a pipe open for good. The chatter goes to stderr; the last line is the package.
+  pack_log="$props_dir/pack.log"
+  "$here/pack" >"$pack_log" 2>&1
+  packed=$?
+  redact <"$pack_log" >&2
+  package=$(tail -1 "$pack_log")
+  [ "$packed" -eq 0 ] || {
+    say false null null false "release: pack failed (exit $packed): $package. Nothing was published."
+    exit 1
+  }
+  if [ "$package" != "$repo/artifacts/aio.$version.nupkg" ] || [ ! -f "$package" ]; then
+    say false null null false "release: pack answered '$package', not artifacts/aio.$version.nupkg: the checkout and $(git -C "$repo" rev-parse --short "$commit") disagree on the version. Nothing was published."
+    exit 1
+  fi
+
+  # 2. Push, with the key only when there is one in the environment.
+  push=(dotnet nuget push "$package" --source "$source_")
+  [ -n "$key" ] && push+=(--api-key "$key")
+  if ! out=$("${push[@]}" 2>&1); then
+    say false null null false "release: dotnet nuget push refused aio $version: $(printf '%s' "$out" | tail -3)"
+    exit 1
+  fi
+  # A folder holds the package once pushed; nuget.org validates it first, and the tag does not wait.
+  if [ "$remote" = true ]; then
+    feed_name="$source_"
+    [ "$source_" = "https://api.nuget.org/v3/index.json" ] && feed_name=nuget.org
+    lead="$feed_name accepted aio $version; it lists it once it validates the package, usually 15 to 30 minutes"
+  fi
+fi
+
+if [ "$tag_it" = false ]; then
+  # Only a folder is in the feed the moment it takes the push.
+  listed=true; [ "$remote" = true ] && listed=false
+  say true null null "$listed" "$lead. --no-tag: nothing was tagged and no release was created."
+  exit 0
+fi
+
+# 3. The tag and its release of notes, read back at origin and at the vendor. A tag origin already has
+# is never moved: on this commit with its release it is done, on another commit it stops the step.
+short=$(git -C "$repo" rev-parse --short "$commit")
+tagged_at() { git -C "$repo" ls-remote --tags origin "refs/tags/$tag" "refs/tags/$tag^{}" 2>/dev/null | tail -1 | cut -f1; }
+at=$(tagged_at)
+if [ -n "$at" ] && [ "$at" != "$commit" ]; then
+  say "$published" null null false "release: $lead, but origin's $tag is on $at, not on $short. It was not moved, and nothing was tagged."
+  exit 1
+fi
+if [ -n "$at" ] && url=$(gh release view "$tag" --json url --jq .url 2>/dev/null) && [ -n "$url" ]; then
+  say "$published" "$tag" "$url" true "$lead, and $tag is already on $short with its release. Nothing was left to do."
+  exit 0
+fi
+previous=$(git -C "$repo" describe --tags --abbrev=0 --exclude "$tag" "$commit" 2>/dev/null || true)
+notes=$(git -C "$repo" log --format='- %s' "${previous:+$previous..}$commit" 2>/dev/null | grep -E '\(#[0-9]+\)$' || true)
+[ -n "$notes" ] || notes="- $(git -C "$repo" log -1 --format='%s' "$commit")"
+if ! out=$(gh release create "$tag" --target "$commit" --title "$tag" --notes "$notes" 2>&1); then
+  say "$published" null null false "release: $lead, but gh refused the release $tag: $out"
+  exit 1
+fi
+
+at=$(tagged_at)
+if [ "$at" != "$commit" ]; then
+  say "$published" "$tag" "$out" false "$lead. gh created $tag, but origin's $tag is on '${at:-nothing}', not on $commit."
+  exit 1
+fi
+if ! gh release view "$tag" --json url --jq .url >/dev/null 2>&1; then
+  say "$published" "$tag" "$out" false "$lead. origin has $tag, but the vendor shows no release $tag."
+  exit 1
+fi
+say "$published" "$tag" "$out" true "$lead. $tag is on $short with a release of notes from ${previous:-the beginning}."
+exit 0

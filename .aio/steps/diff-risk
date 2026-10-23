@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+# Managed by aio. Install harness overwrites it.
+# The `merge-review` state's score: whether a reviewed diff can merge without a person reading it.
+# Answers one JSON line, {outcome, band, why}, where outcome is `low` (the loop goes on alone) or
+# `high` (the loop holds for a person), and band repeats it for a person reading the line; or
+# `unknown` when there is no score to give. Always exit 0: the state reads the outcome, not the
+# exit code.
+#
+#   .aio/steps/diff-risk <issue> [base]      base defaults to origin/master
+#
+# A diff that touches a path of `protected` in .aio/config.json is `high` without asking anyone (#732). The
+# list is read from the merge base, never from the change, so a change that edits the list is judged
+# by the list it is editing. A repository without the list
+# protects no path, and the answer says so once in its why.
+#
+# A small diff is `low` without asking anyone: at most 20 changed lines and no binary file. Measured
+# on 28 merged PRs (#525 to #649) and five diffs of 2 to 4 lines (#551), laya never answered low with
+# the confidence below, and its facts did not tell a one-line migration edit from a one-line comment:
+# `migrations` fired at 0.76 on the comment and 0.69 on the migration. Which paths need a person is
+# a fact git knows, so the list answers it and the model is not asked; 20 lines is a hunk a person
+# reads at a glance, and the table had no merged diff between 4 and 60 lines to set it any finer.
+#
+# A bigger diff goes to the model: typed questions over the diff — laya on localhost, the server
+# risk-score uses — and the decision below is code: `low` only when the model chose low, was
+# confident, and no fact fired. Anything else is `high`, because a score that is not sure asks a
+# person (README.md#the-loop). A missing server, a missing issue or an answer outside the contract
+# is no score at all: `unknown`, which says why, and never reads as a risky diff (#596).
+#
+# LAYA_URL overrides the server, http://127.0.0.1:8317. The engine runs `.aio/scorers/laya/laya
+# ensure` once a pass before a score; this script never installs or retries.
+set -uo pipefail
+export LC_ALL=C  # git's sentences are read here, and the C locale keeps them in English (#762)
+
+issue="${1:-}"
+base="${2:-origin/master}"
+url="${LAYA_URL:-http://127.0.0.1:8317}"
+
+unknown() { # unknown <why...> — the answer when there is no score to give
+  python3 -c 'import json,sys; print(json.dumps({"outcome": "unknown", "band": "unknown", "why": "diff-risk: no se pudo puntuar: " + sys.argv[1]}, ensure_ascii=False))' "$*"
+  exit 0
+}
+
+[ -n "$issue" ] || unknown "no issue number given"
+
+work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
+
+git diff --stat "$base...HEAD" >"$work/diffstat.txt" 2>/dev/null \
+  || unknown "git diff against $base failed — fetch it, or name the base"
+[ -s "$work/diffstat.txt" ] || unknown "the branch has no diff against $base"
+git diff "$base...HEAD" >"$work/diff.txt" 2>/dev/null
+git diff --numstat "$base...HEAD" >"$work/numstat.txt" 2>/dev/null
+# Without renames a move names both of its sides: moving a file out of a protected place touches it.
+git diff --name-only --no-renames "$base...HEAD" >"$work/paths.txt" 2>/dev/null
+
+# Said once, in the why of whatever the answer is, when the base has no list.
+unprotected=""
+# The list is `protected` in .aio/config.json, whose // comment lines are not JSON. A base from
+# before harness 37 has it in .harness/protected-paths, one pattern per line.
+at=$(git merge-base "$base" HEAD)
+if git show "$at:.aio/config.json" >"$work/config.json" 2>/dev/null; then
+  python3 - "$work/config.json" >"$work/protected.txt" <<'PY' || unprotected="the .aio/config.json at the base is not JSON, so no path is protected"
+import json, sys
+text = "".join(line for line in open(sys.argv[1]) if not line.lstrip().startswith("//"))
+print("\n".join(json.loads(text).get("protected", [])))
+PY
+else
+  git show "$at:.harness/protected-paths" >"$work/protected.txt" 2>/dev/null \
+    || unprotected="no protected paths in .aio/config.json at the base, so no path is protected"
+fi
+
+# Prints the answer and exits 0 when the diff touches a protected path; exits 1, printing nothing, for any other.
+[ -z "$unprotected" ] && python3 - "$work/protected.txt" "$work/paths.txt" <<'PY' && exit 0
+import fnmatch, json, sys
+# One pattern per line, `#` starts a comment, and `*` crosses directories, as the checks' `case` does.
+patterns = [line.split("#", 1)[0].strip() for line in open(sys.argv[1])]
+patterns = [pattern for pattern in patterns if pattern]
+paths = [line.rstrip("\n") for line in open(sys.argv[2]) if line.strip()]
+hits = [path for path in paths if any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns)]
+if not hits:
+    sys.exit(1)
+print(json.dumps({"outcome": "high", "band": "high", "why": "protected: " + ", ".join(hits)}, ensure_ascii=False))
+PY
+
+# Prints the answer and exits 0 for a small diff; exits 1, printing nothing, for any other.
+python3 - "$work/numstat.txt" "$unprotected" <<'PY' && exit 0
+import json, sys
+small = 20
+lines, paths = 0, []
+for row in open(sys.argv[1]):
+    added, deleted, path = row.rstrip("\n").split("\t", 2)
+    if added == "-":
+        sys.exit(1)
+    lines += int(added) + int(deleted)
+    paths.append(path)
+if not paths or lines > small:
+    sys.exit(1)
+count = lambda n, word: f"{n} {word}" + ("" if n == 1 else "s")
+why = f"small diff: {count(lines, 'changed line')} in {count(len(paths), 'file')}; " + (sys.argv[2] or "none protected")
+print(json.dumps({"outcome": "low", "band": "low", "why": why}))
+PY
+
+curl -fsS -m 2 "$url/health" >/dev/null 2>&1 \
+  || unknown "no laya server on $url"
+
+command -v gh >/dev/null 2>&1 || unknown "gh is not on PATH, so the issue cannot be read"
+gh issue view "$issue" --json title,body >"$work/issue.json" 2>/dev/null \
+  || unknown "gh issue view $issue failed — no network, no auth, or no such issue"
+
+python3 - "$work" >"$work/request.json" <<'PY'
+import json, sys
+work = sys.argv[1]
+def slurp(name, limit):
+    try: return open(f"{work}/{name}").read()[:limit]
+    except OSError: return ""
+issue = json.load(open(f"{work}/issue.json"))
+state = {
+    "issue_title": issue.get("title", ""),
+    "issue_body": (issue.get("body") or "")[:6000],
+    "diffstat": slurp("diffstat.txt", 3000),
+    "diff": slurp("diff.txt", 12000),
+}
+# One atomic fact each; a fact that fires is a reason for a person to read the diff. Which paths the
+# diff touches is no question for the model: the protected list answered it above.
+questions = {
+    "new_dependency": {"type": "noul", "instructions": "Does this diff add a package, a framework or a new way of reaching outside the process?"},
+    "deletes_or_rewrites": {"type": "noul", "instructions": "Does this diff delete or rewrite a substantial amount of existing code rather than add to it?"},
+    "untested": {"type": "noul", "instructions": "Does this diff change behaviour without adding or changing a test that exercises it?"},
+    "beyond_issue": {"type": "noul", "instructions": "Does this diff change something the issue does not ask for?"},
+    "band": {"type": "choice", "instructions": "Can this diff merge without a person reading it first?",
+             "criteria": {"low": "contained, tested, reversible, and only what the issue asks",
+                          "high": "a person should read it first: it is broad, destructive, untested or beyond the issue"}},
+}
+print(json.dumps({"state": state, "questions": questions}))
+PY
+
+curl -fsS -m 60 "$url/v1/systemone" -H 'content-type: application/json' \
+  --data @"$work/request.json" >"$work/response.json" 2>/dev/null \
+  || unknown "laya answered nothing on $url/v1/systemone"
+
+python3 - "$work/response.json" "$unprotected" <<'PY' || unknown "the answer was not laya's typed contract"
+import json, sys
+
+answers = json.load(open(sys.argv[1]))["answers"]
+facts = ("new_dependency", "deletes_or_rewrites", "untested", "beyond_issue")
+
+def confidence(name):
+    return round(float(answers[name].get("answer_confidence", 0.0)), 3)
+
+fired = [f"{f}={round(float(answers[f]['noul']), 3)}" for f in facts if float(answers[f]["noul"]) >= 0.5]
+unsure = [f"{f}@{confidence(f)}" for f in facts if confidence(f) < 0.5]
+choice = answers["band"].get("choice")
+band_confidence = confidence("band")
+
+reasons = []
+if choice != "low":
+    reasons.append(f"the model chose {choice!r}@{band_confidence}")
+elif band_confidence < 0.7:
+    reasons.append(f"the model chose low but is not sure ({band_confidence} < 0.7)")
+if fired:
+    reasons.append("fired: " + ", ".join(fired))
+if unsure:
+    reasons.append("not sure about: " + ", ".join(unsure))
+
+outcome = "high" if reasons else "low"
+why = "; ".join(reasons) if reasons else f"low@{band_confidence}; no fact fired"
+if sys.argv[2]:
+    why += f"; {sys.argv[2]}"
+print(json.dumps({"outcome": outcome, "band": outcome, "why": why}, ensure_ascii=False))
+PY
+exit 0

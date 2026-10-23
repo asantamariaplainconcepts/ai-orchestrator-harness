@@ -1,0 +1,58 @@
+// What the loop's steps read from this repository: one key each. This repository makes the file its
+// own, like its gate: the harness writes it once and an update leaves it as it is. Whole lines
+// starting with // are comments. Uncomment the lines that fit and make the commas right.
+{
+  // evidence: what .aio/steps/evidence captures in `verifying`, after the gate (#709). Until "paths"
+  // names something, evidence captures nothing and says so.
+  //
+  //   paths   the globs whose change asks for captures
+  //   start   how to start the app: an Aspire AppHost and the resource that serves the pages, or a
+  //           command and the URL it serves
+  //   routes  what to shoot, each in light and dark at 1440x900 and 390x844; tomorrow becomes its date
+  //
+  // A repository whose own tests take the screenshots names "capture" instead of start and routes:
+  // {"command": "...", "screens": "<folder>"}, where the command leaves each PNG beside a JSON sidecar
+  // {screen, module, viewport, theme}.
+  "evidence": {
+    // "paths": ["frontend/**"],
+    // "start": {"aspire": "AppHost/AppHost.csproj", "resource": "frontend"},
+    // "start": {"command": "npm run dev --prefix frontend", "url": "http://localhost:5173"},
+    // "routes": ["/", "/?day=tomorrow"]
+  },
+
+  // quality: what .aio/steps/quality measures in `verifying`, after the gate (#746). It reports on the
+  // issue and blocks nothing; a check whose report is not named says "not measured" and why.
+  //
+  //   coverage     the Cobertura report the gate writes; min, the share of changed lines covered, 70
+  //   crap         a crap.tsv: a "# commit<TAB><sha>" line, then crap, complexity, coverage, file, first
+  //                line, last line and method per line; max, the highest CRAP a touched method may
+  //                score, 30
+  //   mutation     a summary.json as Stryker.NET's step writes it, {since, measured, projects}; reported only
+  //   duplication  paths, what jscpd scans on the head and on the base, "." by default; max, the new
+  //                duplicated lines allowed, 0
+  //   tests        max, the tests lost or skipped allowed, 0
+  //   touched      max, the test files that stood at the base and the change touched outside the issue's
+  //                Dónde cae, 0
+  //   outside      max, the files the change touches that the issue's Dónde cae does not name, 0
+  //   old-tests    max, the tests that fail in their base form against the new code, 0; it builds the
+  //                test projects of the C# test files the change modified, so it takes minutes
+  "quality": {
+    // "coverage": {"report": "artifacts/coverage/Cobertura.xml", "min": 70},
+    // "crap": {"report": "artifacts/coverage/crap.tsv", "max": 30},
+    // "mutation": {"report": "artifacts/mutation/summary.json"},
+    // "duplication": {"paths": ["src"], "max": 0},
+    // "tests": {"max": 0},
+    // "touched": {"max": 0},
+    // "outside": {"max": 0},
+    // "old-tests": {"max": 0}
+  },
+
+  // protected: the paths a person always reviews, whatever the scores say. `*` crosses directories.
+  // diff-risk reads the list from the base commit, never from the change, so a change that edits the
+  // list is judged by the list it is editing. As it ships it names nothing, so no path is protected.
+  //
+  // What belongs here: a concrete path or folder, not a word (`*auth*` catches the author list too);
+  // a path that shows in the diff; and nothing the gate already fails. For example:
+  //   ".aio/*", "AGENTS.md", ".ai/*", ".claude/*", "*/Migrations/*", "*openapi.json", "src/auth/*"
+  "protected": []
+}

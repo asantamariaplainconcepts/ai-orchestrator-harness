@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- The sidebar's logo tile: the one brand hue (--pc-blue-500), white A. -->
+  <rect width="64" height="64" rx="14" fill="#2f69ff"/>
+  <text x="32" y="45" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-weight="700" font-size="38" fill="#ffffff">A</text>
+</svg>

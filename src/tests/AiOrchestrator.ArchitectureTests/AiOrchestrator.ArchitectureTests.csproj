@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>AiOrchestrator.ArchitectureTests</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="NetArchTest.Rules" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Every module, because a module that is not referenced here is a module whose requests
+         nobody checks. Modules.Discovered asserts the list, so adding one fails this project
+         until it is added above. -->
+    <ProjectReference Include="..\..\modules\Workspace\AiOrchestrator.Modules.Workspace\AiOrchestrator.Modules.Workspace.csproj" />
+    <ProjectReference Include="..\..\modules\Pbis\AiOrchestrator.Modules.Pbis\AiOrchestrator.Modules.Pbis.csproj" />
+    <ProjectReference Include="..\..\modules\Runs\AiOrchestrator.Modules.Runs\AiOrchestrator.Modules.Runs.csproj" />
+    <ProjectReference Include="..\..\modules\Loop\AiOrchestrator.Modules.Loop\AiOrchestrator.Modules.Loop.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="Shouldly" />
+  </ItemGroup>
+</Project>

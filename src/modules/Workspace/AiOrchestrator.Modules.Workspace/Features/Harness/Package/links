@@ -1,0 +1,4 @@
+# The symbolic links the harness package installs, one per line: the link, then where it points,
+# relative to the link's directory. Each runtime finds the one set of commands in .ai/commands.
+.claude/commands -> ../.ai/commands
+.opencode/command -> ../.ai/commands

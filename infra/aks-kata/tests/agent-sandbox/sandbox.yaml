@@ -1,0 +1,33 @@
+# One Sandbox, created cold: a Kata pod VM with a persistent /workspace — the shape a worktree
+# would take for one issue. Suspending it (spec.operatingMode: Suspended) is the question the
+# loop's holds ask: does the disk survive while nothing runs?
+apiVersion: agents.x-k8s.io/v1beta1
+kind: Sandbox
+metadata:
+  name: probe-issue
+spec:
+  operatingMode: Running
+  shutdownPolicy: Retain
+  volumeClaimTemplates:
+    - metadata:
+        name: workspace
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: managed-csi
+        resources:
+          requests: { storage: 4Gi }
+  podTemplate:
+    spec:
+      runtimeClassName: kata-vm-isolation
+      nodeSelector: { probe/pool: kata }
+      containers:
+        - name: agent
+          image: mcr.microsoft.com/azurelinux/base/core:3.0
+          command: ["sleep", "infinity"]
+          workingDir: /workspace
+          # Kata sizes the pod VM from these; without limits it gets 512Mi.
+          resources:
+            requests: { cpu: "1", memory: 1Gi }
+            limits: { cpu: "1", memory: 1Gi }
+          volumeMounts:
+            - { name: workspace, mountPath: /workspace }

@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# The gate, as the harness package installs it: a stub that holds every PBI in `verifying` until this
+# repository says how it is tested. Answers one JSON line, {outcome, go, why}: outcome green and exit
+# 0 when the checks passed, red and exit 1 when they did not. The loop reads outcome and why.
+#
+#   .aio/gate [issue]
+#
+# `verifying` runs it at the top of the PBI's worktree, on its branch. Uncomment the line of this
+# repository's stack, or write one like it, and delete the last line. `run` sends the command's whole
+# output to a file outside the tree and names it in the why, with the steps `aspire do ci` counted or
+# the first failing line, so a red gate can be read from the Journey without running it again (#638).
+set -uo pipefail
+
+say() { # say <go> <why>
+  printf '{"outcome": "%s", "go": %s, "why": "%s"}\n' "$([ "$1" = true ] && echo green || echo red)" "$1" \
+    "$(printf '%s' "$2" | tr '\n"\\' "  '")"
+}
+pass() { say true "$1"; exit 0; }
+fail() { say false "$1"; exit 1; }
+
+run() { # run <command...>
+  name=""
+  for word in "$@"; do case "$word" in -*) break ;; esac; name="$name${name:+ }$word"; done
+  tmp="${TMPDIR:-/tmp}"
+  log="${tmp%/}/aio-gate-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)-$$.log"
+  "$@" >"$log" 2>&1
+  code=$?
+  # What aspire do ci counted, when it ran; otherwise the first line a runner marks as failed.
+  steps=$(grep -oE '[0-9]+/[0-9]+ steps succeeded' "$log" | tail -1)
+  failed=$( { grep -m1 '✗' "$log" || grep -m1 -E 'Failed!|^ *FAIL |Error:' "$log"; } | sed 's/^[0-9:]* //' | cut -c1-200)
+  [ "$code" -eq 0 ] && pass "$name passed${steps:+: $steps}. Log: $log"
+  fail "$name failed (exit $code)${failed:+: $failed}${steps:+ ($steps)}. Log: $log"
+}
+
+# run aspire do ci --apphost <the AppHost .csproj>
+# run dotnet test
+# run pnpm test
+
+fail "define your gate here"
